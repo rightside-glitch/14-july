@@ -1,4 +1,3 @@
-
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -7,6 +6,15 @@ import { useNavigate } from "react-router-dom";
 
 const Index = () => {
   const navigate = useNavigate();
+
+  const handleDashboardAccess = (type: 'admin' | 'user') => {
+    // Clear any existing session data
+    sessionStorage.clear();
+    // Store the dashboard type in sessionStorage
+    sessionStorage.setItem('dashboardType', type);
+    // Navigate to auth page
+    navigate('/auth');
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -28,8 +36,7 @@ const Index = () => {
 
         {/* Interface Selection */}
         <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          <Card className="bg-slate-800/50 border-slate-700 hover:border-cyan-500/50 transition-all duration-300 cursor-pointer group"
-                onClick={() => navigate('/admin')}>
+          <Card className="bg-slate-800/50 border-slate-700 hover:border-cyan-500/50 transition-all duration-300 cursor-pointer group">
             <CardHeader className="text-center pb-4">
               <div className="flex justify-center mb-4">
                 <div className="p-3 bg-red-500/20 rounded-full group-hover:bg-red-500/30 transition-colors">
@@ -56,14 +63,16 @@ const Index = () => {
                   <span>System Analytics</span>
                 </div>
               </div>
-              <Button className="mt-6 w-full bg-red-600 hover:bg-red-700 text-white">
+              <Button 
+                className="mt-6 w-full bg-red-600 hover:bg-red-700 text-white"
+                onClick={() => handleDashboardAccess('admin')}
+              >
                 Access Admin Panel
               </Button>
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-800/50 border-slate-700 hover:border-cyan-500/50 transition-all duration-300 cursor-pointer group"
-                onClick={() => navigate('/user')}>
+          <Card className="bg-slate-800/50 border-slate-700 hover:border-cyan-500/50 transition-all duration-300 cursor-pointer group">
             <CardHeader className="text-center pb-4">
               <div className="flex justify-center mb-4">
                 <div className="p-3 bg-cyan-500/20 rounded-full group-hover:bg-cyan-500/30 transition-colors">
@@ -90,7 +99,10 @@ const Index = () => {
                   <span>Usage History</span>
                 </div>
               </div>
-              <Button className="mt-6 w-full bg-cyan-600 hover:bg-cyan-700 text-white">
+              <Button 
+                className="mt-6 w-full bg-cyan-600 hover:bg-cyan-700 text-white"
+                onClick={() => handleDashboardAccess('user')}
+              >
                 View My Usage
               </Button>
             </CardContent>
