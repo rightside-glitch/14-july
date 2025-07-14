@@ -2,8 +2,6 @@
 
 A sophisticated network bandwidth monitoring and analysis tool built with modern web technologies.
 
-## Deployement link [https://today-zeta.vercel.app/]
-
 ## 🚀 Getting Started
 
 1. Clone this repository
@@ -26,7 +24,7 @@ npm run build
 
 ## 🔍 Code Quality
 
-To ensure code quality and consistency:
+ensure code quality and consistency by:
 
 ```bash
 npm run lint
@@ -44,10 +42,7 @@ To deploy your project:
 
 ## 🌐 Custom Domain
 
-To connect a custom domain to your project:
-
-1. Add your domain to your hosting service
-2. Follow your hosting service's instructions for domain configuration
+[https://today-zeta.vercel.app/]
 
 ## 🛠️ Tech Stack
 
@@ -59,6 +54,7 @@ To connect a custom domain to your project:
 - **Routing**: React Router
 - **Charts**: Recharts
 - **UI Components**: Radix UI primitives
+- **Database**: (firebase)[https://console.firebase.com/]
 
 ## 📝 License
 
