@@ -1,15 +1,16 @@
 import { initializeApp } from 'firebase/app';
 import { getAuth, GoogleAuthProvider } from 'firebase/auth';
+import { dotenv } from 'env';
 
 // Your web app's Firebase configuration
 const firebaseConfig = {
-  apiKey: import.meta.env.VITE_FIREBASE_API_KEY,
-  authDomain: import.meta.env.VITE_FIREBASE_AUTH_DOMAIN,
-  projectId: import.meta.env.VITE_FIREBASE_PROJECT_ID,
-  storageBucket: import.meta.env.VITE_FIREBASE_STORAGE_BUCKET,
-  messagingSenderId: import.meta.env.VITE_FIREBASE_MESSAGING_SENDER_ID,
-  appId: import.meta.env.VITE_FIREBASE_APP_ID,
-  measurementId: import.meta.env.VITE_FIREBASE_MEASUREMENT_ID
+  apiKey: "AIzaSyBSDtdlxpLThQ0NZq-r8O6g6cVqVrtYDBU",
+  authDomain: "bandwith-41c0a.firebaseapp.com",
+  projectId: "bandwith-41c0a",
+  storageBucket: "bandwith-41c0a.firebasestorage.app",
+  messagingSenderId: "21824344608",
+  appId: "1:21824344608:web:931de49de100d1f0ef2245",
+  measurementId: "G-Y9ME17HHSZ"
 };
 
 // Initialize Firebase
