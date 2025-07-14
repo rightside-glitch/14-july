@@ -54,7 +54,7 @@ To deploy your project:
 - **Routing**: React Router
 - **Charts**: Recharts
 - **UI Components**: Radix UI primitives
-- **Database**: (firebase)[https://console.firebase.com/]
+- **Database**: firebase
 
 ## 📝 License
 
