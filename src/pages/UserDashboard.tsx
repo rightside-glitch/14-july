@@ -15,51 +15,52 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
+import { db } from "@/lib/firebase";
+import { collection, doc, onSnapshot } from "firebase/firestore";
 
 const UserDashboard = () => {
   const navigate = useNavigate();
   const [currentUsage, setCurrentUsage] = useState(0);
-  const [dailyData, setDailyData] = useState([
-    { time: '00:00', download: 12, upload: 3 },
-    { time: '04:00', download: 8, upload: 2 },
-    { time: '08:00', download: 25, upload: 8 },
-    { time: '12:00', download: 45, upload: 15 },
-    { time: '16:00', download: 38, upload: 12 },
-    { time: '20:00', download: 52, upload: 18 },
-  ]);
-
-  const deviceData = [
-    { name: 'Laptop', value: 45, color: '#06B6D4' },
-    { name: 'Phone', value: 25, color: '#10B981' },
-    { name: 'Tablet', value: 20, color: '#8B5CF6' },
-    { name: 'Other', value: 10, color: '#F59E0B' },
-  ];
-
-  const monthlyUsage = [
-    { day: 'Week 1', usage: 45.2 },
-    { day: 'Week 2', usage: 52.1 },
-    { day: 'Week 3', usage: 38.7 },
-    { day: 'Week 4', usage: 61.3 },
-  ];
-
-  // Simulate real-time usage updates
-  useEffect(() => {
-    const interval = setInterval(() => {
-      setCurrentUsage(prev => {
-        const newUsage = Math.random() * 10 + 15; // Random between 15-25
-        return newUsage;
-      });
-    }, 3000);
-
-    return () => clearInterval(interval);
-  }, []);
-
+  const [dailyData, setDailyData] = useState([]);
+  const [deviceData, setDeviceData] = useState([]);
+  const [monthlyUsage, setMonthlyUsage] = useState([]);
+  const [usedData, setUsedData] = useState(0);
+  const [deviceStatus, setDeviceStatus] = useState('active');
   const dataAllowance = 100; // GB
-  const usedData = 67.3; // GB
   const remainingData = dataAllowance - usedData;
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
+  const readOnly = user.role !== 'admin';
+
+  useEffect(() => {
+    if (!user.uid) return;
+    // Listen to userStats/{uid} document for all stats
+    const unsubStats = onSnapshot(doc(db, 'userStats', user.uid), (docSnap) => {
+      const data = docSnap.data();
+      if (!data) return;
+      setCurrentUsage(data.currentUsage || 0);
+      setDailyData(data.dailyData || []);
+      setDeviceData(data.deviceData || []);
+      setMonthlyUsage(data.monthlyUsage || []);
+      setUsedData(data.usedData || 0);
+    });
+    // Listen to devices/{uid} for device status
+    const unsubDevice = onSnapshot(doc(db, 'devices', user.uid), (docSnap) => {
+      const data = docSnap.data();
+      if (data && data.status) setDeviceStatus(data.status);
+    });
+    return () => {
+      unsubStats();
+      unsubDevice();
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
+      {readOnly && (
+        <div className="bg-yellow-600 text-white text-center py-2 font-semibold">
+          Read-only access: You do not have permission to modify data.
+        </div>
+      )}
       {/* Header */}
       <div className="bg-slate-800/50 border-b border-slate-700">
         <div className="container mx-auto px-4 py-4">
@@ -125,7 +126,11 @@ const UserDashboard = () => {
                 <div>
                   <p className="text-slate-400 text-sm">Connection</p>
                   <p className="text-2xl font-bold text-white">
-                    <Badge className="bg-green-600">Online</Badge>
+                    {deviceStatus === 'active' ? (
+                      <Badge className="bg-green-600">Online</Badge>
+                    ) : (
+                      <Badge className="bg-gray-600">Offline</Badge>
+                    )}
                   </p>
                 </div>
                 <Wifi className="h-8 w-8 text-green-400" />

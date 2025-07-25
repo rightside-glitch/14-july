@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { Activity, Phone, Mail } from "lucide-react";
-import { auth, googleProvider } from "@/lib/firebase";
+import { auth, googleProvider, db } from "@/lib/firebase";
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
@@ -15,6 +15,7 @@ import {
   RecaptchaVerifier,
   signInWithPhoneNumber
 } from "firebase/auth";
+import { setDoc, doc, getDoc } from "firebase/firestore";
 
 export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
@@ -30,20 +31,27 @@ export default function Auth() {
       setIsLoading(true);
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
-      
+      // Fetch or create user doc
+      const userRef = doc(db, "users", user.uid);
+      let userRole = "user";
+      const userSnap = await getDoc(userRef);
+      if (!userSnap.exists()) {
+        await setDoc(userRef, { email: user.email, role: "user" });
+      } else {
+        userRole = userSnap.data().role || "user";
+      }
       toast({
         title: "Success",
         description: "You have been logged in successfully.",
       });
-      
       // Store user info in sessionStorage
       sessionStorage.setItem('user', JSON.stringify({
         uid: user.uid,
         email: user.email,
         displayName: user.displayName,
-        photoURL: user.photoURL
+        photoURL: user.photoURL,
+        role: userRole
       }));
-      
       // Redirect to dashboard
       navigate("/dashboard");
     } catch (error: any) {
@@ -110,18 +118,25 @@ export default function Auth() {
       const credential = await signInWithPhoneNumber(auth, phoneNumber, new RecaptchaVerifier(auth, 'recaptcha-container'));
       const result = await credential.confirm(verificationCode);
       const user = result.user;
-      
+      // Fetch or create user doc
+      const userRef = doc(db, "users", user.uid);
+      let userRole = "user";
+      const userSnap = await getDoc(userRef);
+      if (!userSnap.exists()) {
+        await setDoc(userRef, { phoneNumber: user.phoneNumber, role: "user" });
+      } else {
+        userRole = userSnap.data().role || "user";
+      }
       toast({
         title: "Success",
         description: "Phone number verified successfully.",
       });
-      
       // Store user info in sessionStorage
       sessionStorage.setItem('user', JSON.stringify({
         uid: user.uid,
-        phoneNumber: user.phoneNumber
+        phoneNumber: user.phoneNumber,
+        role: userRole
       }));
-      
       // Redirect to dashboard
       navigate("/dashboard");
     } catch (error: any) {
@@ -155,7 +170,13 @@ export default function Auth() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      
+      // Fetch user role from Firestore
+      let userRole = "user";
+      const userRef = doc(db, "users", user.uid);
+      const userSnap = await getDoc(userRef);
+      if (userSnap.exists()) {
+        userRole = userSnap.data().role || "user";
+      }
       toast({
         title: "Success",
         description: "You have been logged in successfully.",
@@ -165,6 +186,7 @@ export default function Auth() {
       sessionStorage.setItem('user', JSON.stringify({
         uid: user.uid,
         email: user.email,
+        role: userRole
       }));
       // Redirect based on dashboard type
       const dashboardType = sessionStorage.getItem('dashboardType');
@@ -222,7 +244,20 @@ export default function Auth() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      
+      // Create user doc in Firestore
+      await setDoc(doc(db, "users", user.uid), {
+        email: user.email,
+        role: "user"
+      });
+      // Create device doc in Firestore for the new user
+      await setDoc(doc(db, "devices", user.uid), {
+        name: `${user.email}'s Device`,
+        status: "active",
+        type: "desktop",
+        usage: 0,
+        user: user.email,
+        ip: "0.0.0.0"
+      });
       toast({
         title: "Success",
         description: "Your account has been created successfully.",
@@ -232,6 +267,7 @@ export default function Auth() {
       sessionStorage.setItem('user', JSON.stringify({
         uid: user.uid,
         email: user.email,
+        role: "user"
       }));
       // Redirect based on dashboard type
       const dashboardType = sessionStorage.getItem('dashboardType');
@@ -298,6 +334,7 @@ export default function Auth() {
                   <Mail className="w-4 h-4 mr-2" />
                   Login
                 </TabsTrigger>
+                {!isAdmin && (
                 <TabsTrigger 
                   value="signup" 
                   className="data-[state=active]:bg-slate-600 data-[state=active]:text-white text-slate-300"
@@ -305,8 +342,8 @@ export default function Auth() {
                   <Mail className="w-4 h-4 mr-2" />
                   Sign Up
                 </TabsTrigger>
+                )}
               </TabsList>
-
               {/* Email Login/Signup Tabs */}
               <TabsContent value="login" className="mt-6">
                 <form onSubmit={handleLogin} className="space-y-4">
@@ -340,6 +377,7 @@ export default function Auth() {
                   </Button>
                 </form>
               </TabsContent>
+              {!isAdmin && (
               <TabsContent value="signup" className="mt-6">
                 <form onSubmit={handleSignup} className="space-y-4">
                   <div className="space-y-2">
@@ -382,6 +420,7 @@ export default function Auth() {
                   </Button>
                 </form>
               </TabsContent>
+              )}
             </Tabs>
           </CardContent>
           <CardFooter className="flex flex-col space-y-4">
