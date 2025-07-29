@@ -18,7 +18,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
 import { db, handleFirestoreError } from "@/lib/firebase";
-import { collection, onSnapshot, query, orderBy, limit, getDocs, updateDoc, doc, addDoc, deleteDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, limit, getDocs, updateDoc, doc, addDoc, deleteDoc, serverTimestamp } from "firebase/firestore";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useRef } from "react";
 import { Input } from "@/components/ui/input";
@@ -198,6 +198,7 @@ const AdminDashboard = () => {
     }
   ]);
   const intervalRef = useRef<NodeJS.Timeout | undefined>();
+  const dataCollectionRef = useRef<NodeJS.Timeout | undefined>();
 
   // Generate sample data if no real data exists
   const generateSampleBandwidthData = () => {
@@ -213,6 +214,52 @@ const AdminDashboard = () => {
       });
     }
     return sampleData;
+  };
+
+  // Start real-time data collection for admin dashboard
+  const startAdminDataCollection = async () => {
+    if (dataCollectionRef.current) return;
+    
+    dataCollectionRef.current = setInterval(async () => {
+      try {
+        const totalUsage = devices.reduce((sum, device) => sum + (typeof device.usage === 'number' ? device.usage : 0), 0);
+        const timestamp = new Date();
+        
+        // Add to global bandwidth collection
+        await addDoc(collection(db, "bandwidth"), {
+          totalUsage,
+          timestamp: serverTimestamp(),
+          createdAt: timestamp,
+          deviceCount: devices.length,
+          activeDeviceCount: devices.filter(d => d.status === 'active').length
+        });
+
+        // Add device-specific usage data
+        for (const device of devices) {
+          if (device.status === 'active' && device.usage > 0) {
+            await addDoc(collection(db, `deviceUsage/${device.id}/data`), {
+              usage: device.usage,
+              timestamp: serverTimestamp(),
+              createdAt: timestamp,
+              deviceName: device.name,
+              deviceType: device.type,
+              user: device.user
+            });
+          }
+        }
+
+      } catch (error) {
+        console.error('Error collecting admin real-time data:', error);
+      }
+    }, 5000); // Collect data every 5 seconds
+  };
+
+  // Stop admin data collection
+  const stopAdminDataCollection = () => {
+    if (dataCollectionRef.current) {
+      clearInterval(dataCollectionRef.current);
+      dataCollectionRef.current = undefined;
+    }
   };
 
   useEffect(() => {
@@ -239,6 +286,24 @@ const AdminDashboard = () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
   }, [devices]);
+
+  // Start admin data collection when devices are loaded
+  useEffect(() => {
+    if (devices.length > 0) {
+      startAdminDataCollection();
+    }
+    
+    return () => {
+      stopAdminDataCollection();
+    };
+  }, [devices]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      stopAdminDataCollection();
+    };
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -268,6 +333,21 @@ const AdminDashboard = () => {
       </div>
 
       <div className="container mx-auto px-4 py-8">
+        {/* Real-Time Data Collection Status */}
+        <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <div className={`w-3 h-3 rounded-full ${dataCollectionRef.current ? 'bg-green-500' : 'bg-red-500'}`}></div>
+              <span className="text-white">
+                Real-time data collection: {dataCollectionRef.current ? 'Active' : 'Inactive'}
+              </span>
+            </div>
+            <div className="text-sm text-slate-400">
+              Collecting data every 5 seconds from {devices.length} devices
+            </div>
+          </div>
+        </div>
+
         {/* Stats Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="bg-slate-800/50 border-slate-700">
