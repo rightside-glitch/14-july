@@ -31,16 +31,29 @@ export default function Auth() {
       setIsLoading(true);
       const result = await signInWithPopup(auth, googleProvider);
       const user = result.user;
+      
+      // Get dashboard type from sessionStorage
+      const dashboardType = sessionStorage.getItem('dashboardType');
+      const isAdmin = dashboardType === 'admin';
+      
       // Fetch or create user doc
       const userRef = doc(db, "users", user.uid);
-      let userRole = "user";
+      let userRole = isAdmin ? "admin" : "user";
       try {
         const userSnap = await getDoc(userRef);
         if (!userSnap.exists()) {
           console.log('Creating new user document for Google sign-in');
-          await setDoc(userRef, { email: user.email, role: "user" });
+          await setDoc(userRef, { email: user.email, role: userRole });
         } else {
-          userRole = userSnap.data().role || "user";
+          // If user exists, check if they're trying to access admin panel
+          const existingRole = userSnap.data().role || "user";
+          if (isAdmin && existingRole !== "admin") {
+            // Update role to admin if accessing admin panel
+            await setDoc(userRef, { email: user.email, role: "admin" }, { merge: true });
+            userRole = "admin";
+          } else {
+            userRole = existingRole;
+          }
         }
       } catch (error) {
         console.error('Error handling user document:', error);
@@ -124,14 +137,27 @@ export default function Auth() {
       const credential = await signInWithPhoneNumber(auth, phoneNumber, new RecaptchaVerifier(auth, 'recaptcha-container'));
       const result = await credential.confirm(verificationCode);
       const user = result.user;
+      
+      // Get dashboard type from sessionStorage
+      const dashboardType = sessionStorage.getItem('dashboardType');
+      const isAdmin = dashboardType === 'admin';
+      
       // Fetch or create user doc
       const userRef = doc(db, "users", user.uid);
-      let userRole = "user";
+      let userRole = isAdmin ? "admin" : "user";
       const userSnap = await getDoc(userRef);
       if (!userSnap.exists()) {
-        await setDoc(userRef, { phoneNumber: user.phoneNumber, role: "user" });
+        await setDoc(userRef, { phoneNumber: user.phoneNumber, role: userRole });
       } else {
-        userRole = userSnap.data().role || "user";
+        // If user exists, check if they're trying to access admin panel
+        const existingRole = userSnap.data().role || "user";
+        if (isAdmin && existingRole !== "admin") {
+          // Update role to admin if accessing admin panel
+          await setDoc(userRef, { phoneNumber: user.phoneNumber, role: "admin" }, { merge: true });
+          userRole = "admin";
+        } else {
+          userRole = existingRole;
+        }
       }
       toast({
         title: "Success",
@@ -176,12 +202,24 @@ export default function Auth() {
     try {
       const userCredential = await signInWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
+      
+      // Get dashboard type from sessionStorage
+      const dashboardType = sessionStorage.getItem('dashboardType');
+      const isAdmin = dashboardType === 'admin';
+      
       // Fetch user role from Firestore
       let userRole = "user";
       const userRef = doc(db, "users", user.uid);
       const userSnap = await getDoc(userRef);
       if (userSnap.exists()) {
-        userRole = userSnap.data().role || "user";
+        const existingRole = userSnap.data().role || "user";
+        if (isAdmin && existingRole !== "admin") {
+          // Update role to admin if accessing admin panel
+          await setDoc(userRef, { email: user.email, role: "admin" }, { merge: true });
+          userRole = "admin";
+        } else {
+          userRole = existingRole;
+        }
       }
       toast({
         title: "Success",
@@ -195,7 +233,6 @@ export default function Auth() {
         role: userRole
       }));
       // Redirect based on dashboard type
-      const dashboardType = sessionStorage.getItem('dashboardType');
       if (!dashboardType) {
         toast({
           title: "Select Dashboard Type",
@@ -251,12 +288,17 @@ export default function Auth() {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
       
+      // Get dashboard type from sessionStorage
+      const dashboardType = sessionStorage.getItem('dashboardType');
+      const isAdmin = dashboardType === 'admin';
+      const userRole = isAdmin ? "admin" : "user";
+      
       try {
         console.log('Creating user document for new signup');
         // Create user doc in Firestore
         await setDoc(doc(db, "users", user.uid), {
           email: user.email,
-          role: "user"
+          role: userRole
         });
         
         console.log('Creating device document for new user');
@@ -282,10 +324,9 @@ export default function Auth() {
       sessionStorage.setItem('user', JSON.stringify({
         uid: user.uid,
         email: user.email,
-        role: "user"
+        role: userRole
       }));
       // Redirect based on dashboard type
-      const dashboardType = sessionStorage.getItem('dashboardType');
       if (!dashboardType) {
         toast({
           title: "Select Dashboard Type",
