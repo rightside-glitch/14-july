@@ -99,7 +99,7 @@ const AdminDashboard = () => {
         setUserStats(stats);
         
         // Calculate total usage from actual user data
-        const totalUsage = stats.reduce((sum, stat) => sum + (stat.currentUsage || 0), 0);
+        const totalUsage = stats.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0);
         const maxNetworkCapacity = 10; // GB/h
         const networkLoadPercentage = Math.min(100, Math.max(0, (totalUsage / maxNetworkCapacity) * 100));
         setNetworkLoad(networkLoadPercentage);
@@ -248,7 +248,7 @@ const AdminDashboard = () => {
     dataCollectionRef.current = setInterval(async () => {
       try {
         // Calculate total usage from actual user data
-        const totalUsage = userStats.reduce((sum, stat) => sum + (stat.currentUsage || 0), 0);
+        const totalUsage = userStats.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0);
         const timestamp = new Date();
         
         // Add to global bandwidth collection
@@ -278,15 +278,15 @@ const AdminDashboard = () => {
 
         // Sync user data to ensure consistency
         for (const stat of userStats) {
-          if (stat.currentUsage > 0) {
-            await addDoc(collection(db, `adminUserSync/${stat.id}/data`), {
-              currentUsage: stat.currentUsage,
-              usedData: stat.usedData,
-              dataLimit: stat.dataLimit,
-              timestamp: serverTimestamp(),
-              createdAt: timestamp,
-              userEmail: stat.userEmail
-            });
+          if ((stat as any).currentUsage > 0) {
+                          await addDoc(collection(db, `adminUserSync/${stat.id}/data`), {
+                currentUsage: (stat as any).currentUsage,
+                usedData: (stat as any).usedData,
+                dataLimit: (stat as any).dataLimit,
+                timestamp: serverTimestamp(),
+                createdAt: timestamp,
+                userEmail: (stat as any).userEmail
+              });
           }
         }
 
@@ -421,7 +421,7 @@ const AdminDashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-slate-400 text-sm">Total Usage (from Users)</p>
-                  <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat) => sum + (stat.currentUsage || 0), 0)).toFixed(1)} GB/h</p>
+                  <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0)).toFixed(1)} GB/h</p>
                 </div>
                 <Activity className="h-8 w-8 text-green-400" />
               </div>
@@ -510,6 +510,33 @@ const AdminDashboard = () => {
           </Card>
         </div>
 
+        {/* Total Usage Summary */}
+        <Card className="bg-slate-800/50 border-slate-700 mb-6">
+          <CardHeader>
+            <CardTitle className="text-white">Total Usage Summary (Live from Users)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="text-center p-4 bg-slate-700/30 rounded-lg">
+                <p className="text-slate-400 text-sm">Total Users</p>
+                <p className="text-2xl font-bold text-white">{userStats.length}</p>
+              </div>
+              <div className="text-center p-4 bg-slate-700/30 rounded-lg">
+                <p className="text-slate-400 text-sm">Total Usage (GB/h)</p>
+                <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0)).toFixed(1)}</p>
+              </div>
+              <div className="text-center p-4 bg-slate-700/30 rounded-lg">
+                <p className="text-slate-400 text-sm">Total Used (GB)</p>
+                <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat: any) => sum + (stat.usedData || 0), 0)).toFixed(1)}</p>
+              </div>
+              <div className="text-center p-4 bg-slate-700/30 rounded-lg">
+                <p className="text-slate-400 text-sm">Network Load</p>
+                <p className="text-2xl font-bold text-white">{networkLoad.toFixed(1)}%</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* User Data Sync */}
         <Card className="bg-slate-800/50 border-slate-700 mb-8">
           <CardHeader>
@@ -523,28 +550,28 @@ const AdminDashboard = () => {
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
                         <Users className="h-4 w-4" />
-                        <span className="text-white font-medium">{stat.userEmail || 'Unknown User'}</span>
+                        <span className="text-white font-medium">{(stat as any).userEmail || 'Unknown User'}</span>
                       </div>
                       <Badge variant="outline" className="border-slate-600 text-slate-300">
-                        {stat.role || 'user'}
+                        {(stat as any).role || 'user'}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-6">
                       <div className="text-right">
                         <p className="text-slate-400 text-sm">Current Usage</p>
-                        <p className="text-white">{(stat.currentUsage || 0).toFixed(1)} GB/h</p>
+                        <p className="text-white">{((stat as any).currentUsage || 0).toFixed(1)} GB/h</p>
                       </div>
                       <div className="text-right">
                         <p className="text-slate-400 text-sm">Used This Month</p>
-                        <p className="text-white">{(stat.usedData || 0).toFixed(1)} GB</p>
+                        <p className="text-white">{((stat as any).usedData || 0).toFixed(1)} GB</p>
                       </div>
                       <div className="text-right">
                         <p className="text-slate-400 text-sm">Data Limit</p>
-                        <p className="text-white">{stat.dataLimit || 100} GB</p>
+                        <p className="text-white">{(stat as any).dataLimit || 100} GB</p>
                       </div>
                       <div className="w-32">
                         <Progress
-                          value={((stat.usedData || 0) / (stat.dataLimit || 100)) * 100}
+                          value={(((stat as any).usedData || 0) / ((stat as any).dataLimit || 100)) * 100}
                           className="h-2"
                         />
                       </div>
