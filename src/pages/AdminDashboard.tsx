@@ -17,46 +17,92 @@ import {
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
-import { db } from "@/lib/firebase";
-import { collection, onSnapshot, query, orderBy, limit, getDocs, updateDoc, doc } from "firebase/firestore";
+import { db, handleFirestoreError } from "@/lib/firebase";
+import { collection, onSnapshot, query, orderBy, limit, getDocs, updateDoc, doc, addDoc, deleteDoc } from "firebase/firestore";
 import { Dialog, DialogTrigger, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { useRef } from "react";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
   const [realTimeData, setRealTimeData] = useState([]);
   const [devices, setDevices] = useState([]);
   const [userCount, setUserCount] = useState(0);
+  const [networkLoad, setNetworkLoad] = useState(0);
+  const [showAddDevice, setShowAddDevice] = useState(false);
+  const [newDevice, setNewDevice] = useState({
+    name: '',
+    type: 'desktop',
+    user: '',
+    ip: '',
+    usage: 0
+  });
+  const [isAddingDevice, setIsAddingDevice] = useState(false);
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
   const readOnly = user.role !== 'admin';
 
   // Listen to Firestore devices collection
   useEffect(() => {
-    const unsub = onSnapshot(collection(db, "devices"), (snapshot) => {
-      setDevices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
-    });
+    console.log('Setting up devices listener...');
+    const unsub = onSnapshot(
+      collection(db, "devices"), 
+      (snapshot) => {
+        console.log('Devices snapshot received:', snapshot.docs.length, 'devices');
+        setDevices(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+      },
+      (error) => {
+        console.error('Devices listener error:', error);
+        handleFirestoreError(error, 'devices listener');
+      }
+    );
     return () => unsub();
   }, []);
 
-  // Listen to Firestore users collection for user count
+  // Listen to Firestore users collection for user count (excluding admins)
   useEffect(() => {
+    console.log('Setting up users listener...');
     // Initial fetch in case onSnapshot doesn't fire if collection is empty
-    getDocs(collection(db, "users")).then(snapshot => {
-      setUserCount(snapshot.size);
-    });
-    const unsub = onSnapshot(collection(db, "users"), (snapshot) => {
-      setUserCount(snapshot.size);
-    });
+    getDocs(collection(db, "users"))
+      .then(snapshot => {
+        const regularUsers = snapshot.docs.filter(doc => doc.data().role !== 'admin');
+        setUserCount(regularUsers.length);
+      })
+      .catch(error => {
+        handleFirestoreError(error, 'initial users fetch');
+      });
+    
+    const unsub = onSnapshot(
+      collection(db, "users"), 
+      (snapshot) => {
+        const regularUsers = snapshot.docs.filter(doc => doc.data().role !== 'admin');
+        setUserCount(regularUsers.length);
+      },
+      (error) => {
+        handleFirestoreError(error, 'users listener');
+      }
+    );
     return () => unsub();
   }, []);
 
   // Listen to Firestore bandwidth collection (last 20 points, ordered by timestamp)
   useEffect(() => {
+    console.log('Setting up bandwidth listener...');
     const q = query(collection(db, "bandwidth"), orderBy("timestamp", "desc"), limit(20));
-    const unsub = onSnapshot(q, (snapshot) => {
-      // Reverse to get oldest first for chart
-      setRealTimeData(snapshot.docs.map(doc => doc.data()).reverse());
-    });
+    const unsub = onSnapshot(
+      q, 
+      (snapshot) => {
+        console.log('Bandwidth snapshot received:', snapshot.docs.length, 'points');
+        // Reverse to get oldest first for chart
+        setRealTimeData(snapshot.docs.map(doc => doc.data()).reverse());
+      },
+      (error) => {
+        console.error('Bandwidth listener error:', error);
+        handleFirestoreError(error, 'bandwidth listener');
+      }
+    );
     return () => unsub();
   }, []);
 
@@ -71,15 +117,78 @@ const AdminDashboard = () => {
     }
   };
 
+  const handleAddDevice = async () => {
+    if (!newDevice.name || !newDevice.user || !newDevice.ip) {
+      alert('Please fill in all required fields');
+      return;
+    }
+
+    setIsAddingDevice(true);
+    try {
+      const deviceData = {
+        ...newDevice,
+        status: 'active',
+        lastSeen: new Date(),
+        createdAt: new Date()
+      };
+
+      await addDoc(collection(db, "devices"), deviceData);
+      console.log('Device added successfully');
+      
+      // Reset form
+      setNewDevice({
+        name: '',
+        type: 'desktop',
+        user: '',
+        ip: '',
+        usage: 0
+      });
+      setShowAddDevice(false);
+    } catch (error) {
+      console.error('Error adding device:', error);
+      handleFirestoreError(error, 'add device');
+    } finally {
+      setIsAddingDevice(false);
+    }
+  };
+
+  const handleDeleteDevice = async (deviceId) => {
+    if (window.confirm('Are you sure you want to delete this device?')) {
+      try {
+        await deleteDoc(doc(db, "devices", deviceId));
+        console.log('Device deleted successfully');
+      } catch (error) {
+        console.error('Error deleting device:', error);
+        handleFirestoreError(error, 'delete device');
+      }
+    }
+  };
+
+  // Generate sample devices if no real devices exist
+  const sampleDevices = [
+    { id: 'sample1', name: 'Admin Desktop', usage: 2.5, type: 'desktop', status: 'active' },
+    { id: 'sample2', name: 'Marketing Laptop', usage: 1.8, type: 'laptop', status: 'active' },
+    { id: 'sample3', name: 'Sales Mobile', usage: 0.5, type: 'mobile', status: 'active' },
+    { id: 'sample4', name: 'Conference TV', usage: 0.8, type: 'tv', status: 'active' },
+    { id: 'sample5', name: 'Gaming PC', usage: 3.2, type: 'gaming', status: 'active' }
+  ];
+
+  // Use real devices if available, otherwise use sample data
+  const displayDevices = devices.length > 0 ? devices : sampleDevices;
+
   // Calculate total bandwidth safely
-  const totalBandwidth = devices.reduce(
+  const totalBandwidth = displayDevices.reduce(
     (sum, device) => sum + (typeof device.usage === 'number' ? device.usage : 0),
     0
   );
-  const activeDevices = devices.filter(device => device.status === 'active').length;
+  const activeDevices = displayDevices.filter(device => device.status === 'active').length;
 
   // Calculate total usage for all active devices
   const totalActiveUsage = devices.filter(device => device.status === 'active').reduce((sum, device) => sum + (typeof device.usage === 'number' ? device.usage : 0), 0);
+
+  // Calculate network load percentage (assuming max capacity of 10 GB/h)
+  const maxNetworkCapacity = 10; // GB/h
+  const networkLoadPercentage = Math.min(100, Math.max(0, (totalActiveUsage / maxNetworkCapacity) * 100));
 
   // For the real-time bandwidth usage graph, use the sum of 'usage' from all devices
   const [bandwidthChartData, setBandwidthChartData] = useState([
@@ -90,18 +199,42 @@ const AdminDashboard = () => {
   ]);
   const intervalRef = useRef<NodeJS.Timeout | undefined>();
 
+  // Generate sample data if no real data exists
+  const generateSampleBandwidthData = () => {
+    const now = Date.now();
+    const sampleData = [];
+    for (let i = 59; i >= 0; i--) {
+      const timestamp = now - (i * 1000);
+      const baseUsage = 2.5; // Base usage in GB/h
+      const variation = Math.sin(i * 0.1) * 1.5; // Add some variation
+      sampleData.push({
+        timestamp,
+        totalUsage: Math.max(0, baseUsage + variation)
+      });
+    }
+    return sampleData;
+  };
+
   useEffect(() => {
     // Clear previous interval if any
     if (intervalRef.current) clearInterval(intervalRef.current);
-    intervalRef.current = setInterval(() => {
-      setBandwidthChartData(prev => [
-        ...prev.slice(-59), // keep last 59 points for a 1-minute window
-        {
-          timestamp: Date.now(),
-          totalUsage: devices.reduce((sum, device) => sum + (typeof device.usage === 'number' ? device.usage : 0), 0)
-        }
-      ]);
-    }, 1000);
+    
+    // If no devices, generate sample data
+    if (devices.length === 0) {
+      console.log('No devices found, generating sample bandwidth data');
+      setBandwidthChartData(generateSampleBandwidthData());
+    } else {
+      intervalRef.current = setInterval(() => {
+        setBandwidthChartData(prev => [
+          ...prev.slice(-59), // keep last 59 points for a 1-minute window
+          {
+            timestamp: Date.now(),
+            totalUsage: devices.reduce((sum, device) => sum + (typeof device.usage === 'number' ? device.usage : 0), 0)
+          }
+        ]);
+      }, 5000);
+    }
+    
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
@@ -141,7 +274,7 @@ const AdminDashboard = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-400 text-sm">Total Users</p>
+                  <p className="text-slate-400 text-sm">Total Users (excluding Admins)</p>
                   <p className="text-2xl font-bold text-white">{userCount}</p>
                 </div>
                 <Users className="h-8 w-8 text-cyan-400" />
@@ -178,7 +311,7 @@ const AdminDashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-slate-400 text-sm">Network Load</p>
-                  <p className="text-2xl font-bold text-white">67%</p>
+                  <p className="text-2xl font-bold text-white">{networkLoadPercentage.toFixed(1)}%</p>
                 </div>
                 <TrendingUp className="h-8 w-8 text-yellow-400" />
               </div>
@@ -248,7 +381,7 @@ const AdminDashboard = () => {
                       borderRadius: '8px'
                     }}
                   />
-                  <Bar dataKey="usage" fill="#10B981" />
+                  <Bar dataKey="usage" fill="#10B981" isAnimationActive={true} animationDuration={1200} animationEasing="ease-out" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -258,7 +391,96 @@ const AdminDashboard = () => {
         {/* Device Management */}
         <Card className="bg-slate-800/50 border-slate-700">
           <CardHeader>
-            <CardTitle className="text-white">Device Management</CardTitle>
+            <div className="flex items-center justify-between">
+              <CardTitle className="text-white">Device Management</CardTitle>
+              {!readOnly && (
+                <Dialog open={showAddDevice} onOpenChange={setShowAddDevice}>
+                  <DialogTrigger asChild>
+                    <Button className="bg-green-600 hover:bg-green-700">
+                      <Activity className="h-4 w-4 mr-2" />
+                      Add Device
+                    </Button>
+                  </DialogTrigger>
+                  <DialogContent className="bg-slate-800 border-slate-700">
+                    <DialogHeader>
+                      <DialogTitle className="text-white">Add New Device</DialogTitle>
+                    </DialogHeader>
+                    <div className="space-y-4">
+                      <div>
+                        <Label htmlFor="deviceName" className="text-slate-300">Device Name</Label>
+                        <Input
+                          id="deviceName"
+                          value={newDevice.name}
+                          onChange={(e) => setNewDevice({...newDevice, name: e.target.value})}
+                          placeholder="e.g., John's Laptop"
+                          className="bg-slate-700 border-slate-600 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="deviceType" className="text-slate-300">Device Type</Label>
+                        <Select value={newDevice.type} onValueChange={(value) => setNewDevice({...newDevice, type: value})}>
+                          <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent className="bg-slate-700 border-slate-600">
+                            <SelectItem value="desktop">Desktop</SelectItem>
+                            <SelectItem value="laptop">Laptop</SelectItem>
+                            <SelectItem value="mobile">Mobile</SelectItem>
+                            <SelectItem value="tv">TV</SelectItem>
+                            <SelectItem value="gaming">Gaming</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+                      <div>
+                        <Label htmlFor="deviceUser" className="text-slate-300">User Email</Label>
+                        <Input
+                          id="deviceUser"
+                          type="email"
+                          value={newDevice.user}
+                          onChange={(e) => setNewDevice({...newDevice, user: e.target.value})}
+                          placeholder="user@example.com"
+                          className="bg-slate-700 border-slate-600 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="deviceIP" className="text-slate-300">IP Address</Label>
+                        <Input
+                          id="deviceIP"
+                          value={newDevice.ip}
+                          onChange={(e) => setNewDevice({...newDevice, ip: e.target.value})}
+                          placeholder="192.168.1.100"
+                          className="bg-slate-700 border-slate-600 text-white"
+                        />
+                      </div>
+                      <div>
+                        <Label htmlFor="deviceUsage" className="text-slate-300">Initial Usage (GB/h)</Label>
+                        <Input
+                          id="deviceUsage"
+                          type="number"
+                          step="0.1"
+                          value={newDevice.usage}
+                          onChange={(e) => setNewDevice({...newDevice, usage: parseFloat(e.target.value) || 0})}
+                          placeholder="0.0"
+                          className="bg-slate-700 border-slate-600 text-white"
+                        />
+                      </div>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setShowAddDevice(false)} className="border-slate-600 text-slate-300">
+                        Cancel
+                      </Button>
+                      <Button 
+                        onClick={handleAddDevice} 
+                        disabled={isAddingDevice}
+                        className="bg-green-600 hover:bg-green-700"
+                      >
+                        {isAddingDevice ? 'Adding...' : 'Add Device'}
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
+              )}
+            </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -317,6 +539,15 @@ const AdminDashboard = () => {
                               await updateDoc(doc(db, "devices", device.id), { status: "active" });
                             }}>
                               Activate
+                            </Button>
+                          )}
+                          {!readOnly && (
+                            <Button 
+                              variant="destructive" 
+                              onClick={() => handleDeleteDevice(device.id)}
+                              className="bg-red-600 hover:bg-red-700"
+                            >
+                              Delete
                             </Button>
                           )}
                         </DialogFooter>

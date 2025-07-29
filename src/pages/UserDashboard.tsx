@@ -16,7 +16,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 import { db } from "@/lib/firebase";
-import { collection, doc, onSnapshot } from "firebase/firestore";
+import { collection, doc, onSnapshot, query, orderBy, limit } from "firebase/firestore";
 
 const UserDashboard = () => {
   const navigate = useNavigate();
@@ -30,29 +30,136 @@ const UserDashboard = () => {
   const remainingData = dataAllowance - usedData;
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
   const readOnly = user.role !== 'admin';
+  const [userBandwidthData, setUserBandwidthData] = useState([]);
 
   useEffect(() => {
     if (!user.uid) return;
+    
+    // Only allow regular users to access their own data
+    if (user.role === 'admin') {
+      console.log('Admin user detected, redirecting to admin dashboard');
+      navigate('/admin');
+      return;
+    }
+    
+    console.log('Setting up user dashboard listeners for regular user');
+
+    // Fallback sample data
+    const sampleStats = {
+      currentUsage: 12.5,
+      dailyData: generateDailyData(),
+      deviceData: [
+        { name: 'Laptop', value: 60, color: '#06B6D4' },
+        { name: 'Phone', value: 40, color: '#10B981' }
+      ],
+      monthlyUsage: generateWeeklyData(),
+      usedData: 23.4
+    };
+    
     // Listen to userStats/{uid} document for all stats
-    const unsubStats = onSnapshot(doc(db, 'userStats', user.uid), (docSnap) => {
-      const data = docSnap.data();
-      if (!data) return;
-      setCurrentUsage(data.currentUsage || 0);
-      setDailyData(data.dailyData || []);
-      setDeviceData(data.deviceData || []);
-      setMonthlyUsage(data.monthlyUsage || []);
-      setUsedData(data.usedData || 0);
-    });
+    const unsubStats = onSnapshot(
+      doc(db, 'userStats', user.uid), 
+      (docSnap) => {
+        const data = docSnap.data();
+        if (!data) {
+          console.log('No userStats data found, using sample data');
+          setCurrentUsage(sampleStats.currentUsage);
+          setDailyData(sampleStats.dailyData);
+          setDeviceData(sampleStats.deviceData);
+          setMonthlyUsage(sampleStats.monthlyUsage);
+          setUsedData(sampleStats.usedData);
+        } else {
+          setCurrentUsage(data.currentUsage || 0);
+          setDailyData(data.dailyData || generateDailyData());
+          setDeviceData(data.deviceData || []);
+          setMonthlyUsage(data.monthlyUsage || generateWeeklyData());
+          setUsedData(data.usedData || 0);
+        }
+      },
+      (error) => {
+        console.error('UserStats listener error:', error);
+        if (error.code === 'permission-denied') {
+          console.error('Permission denied: User cannot access userStats');
+        }
+      }
+    );
+    
     // Listen to devices/{uid} for device status
-    const unsubDevice = onSnapshot(doc(db, 'devices', user.uid), (docSnap) => {
-      const data = docSnap.data();
-      if (data && data.status) setDeviceStatus(data.status);
+    const unsubDevice = onSnapshot(
+      doc(db, 'devices', user.uid), 
+      (docSnap) => {
+        const data = docSnap.data();
+        if (data && data.status) setDeviceStatus(data.status);
+      },
+      (error) => {
+        console.error('Device listener error:', error);
+        if (error.code === 'permission-denied') {
+          console.error('Permission denied: User cannot access device data');
+        }
+      }
+    );
+    
+    // Listen to per-user real-time bandwidth data
+    const q = query(
+      collection(db, 'userBandwidth', user.uid, 'data'),
+      orderBy('timestamp', 'desc'),
+      limit(20)
+    );
+    const unsubBandwidth = onSnapshot(q, (snapshot) => {
+      // Reverse to get oldest first for chart
+      setUserBandwidthData(snapshot.docs.map(doc => doc.data()).reverse());
     });
+    
     return () => {
       unsubStats();
       unsubDevice();
+      unsubBandwidth();
     };
-  }, []);
+  }, [user.uid, user.role, navigate]);
+
+  // Regenerate dynamic data when usage changes
+  useEffect(() => {
+    if (currentUsage > 0 || usedData > 0) {
+      setDailyData(generateDailyData());
+      setMonthlyUsage(generateWeeklyData());
+    }
+  }, [currentUsage, usedData]);
+
+  // Generate dynamic daily usage data based on current time
+  function generateDailyData() {
+    const data = [];
+    const now = new Date();
+    const currentHour = now.getHours();
+    
+    for (let i = 0; i < 24; i++) {
+      const hour = (currentHour - 23 + i + 24) % 24;
+      const time = `${hour.toString().padStart(2, '0')}:00`;
+      const baseUsage = currentUsage || 1.5;
+      const variation = Math.sin(i * 0.3) * 0.8 + Math.random() * 0.5;
+      data.push({
+        time,
+        download: Math.max(0, baseUsage + variation),
+        upload: Math.max(0, (baseUsage * 0.3) + variation * 0.2)
+      });
+    }
+    return data;
+  }
+
+  // Generate dynamic weekly usage data
+  function generateWeeklyData() {
+    const days = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+    const data = [];
+    const baseUsage = usedData / 7 || 3.5;
+    
+    days.forEach((day, index) => {
+      const variation = Math.sin(index * 0.5) * 2 + Math.random() * 1.5;
+      data.push({
+        day,
+        usage: Math.max(0, baseUsage + variation)
+      });
+    });
+    return data;
+  }
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -82,6 +189,43 @@ const UserDashboard = () => {
       </div>
 
       <div className="container mx-auto px-4 py-8">
+        {/* Real-Time Bandwidth Graph */}
+        <Card className="bg-slate-800/50 border-slate-700 mb-8">
+          <CardHeader>
+            <CardTitle className="text-white">Real-Time Bandwidth Usage (GB/h)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ResponsiveContainer width="100%" height={300}>
+              <LineChart data={userBandwidthData}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                <XAxis
+                  dataKey="timestamp"
+                  stroke="#9CA3AF"
+                  tickFormatter={ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
+                />
+                <YAxis stroke="#9CA3AF" unit=" GB/h" />
+                <Tooltip
+                  labelFormatter={ts => new Date(ts).toLocaleString()}
+                  formatter={value => [`${value} GB/h`, 'Usage']}
+                />
+                <Line
+                  type="monotone"
+                  dataKey="usage"
+                  stroke="#06B6D4"
+                  strokeWidth={2}
+                  dot={false}
+                  name="Usage"
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          </CardContent>
+        </Card>
+        {/* Show message if no data is available */}
+        {dailyData.length === 0 && deviceData.length === 0 && monthlyUsage.length === 0 && (
+          <div className="bg-yellow-700 text-white text-center py-2 mb-4 rounded">
+            No usage data available. Showing sample data.
+          </div>
+        )}
         {/* Current Status Cards */}
         <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="bg-slate-800/50 border-slate-700">

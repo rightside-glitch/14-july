@@ -7,7 +7,7 @@ import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle }
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useToast } from "@/components/ui/use-toast";
 import { Activity, Phone, Mail } from "lucide-react";
-import { auth, googleProvider, db } from "@/lib/firebase";
+import { auth, googleProvider, db, handleFirestoreError } from "@/lib/firebase";
 import { 
   createUserWithEmailAndPassword, 
   signInWithEmailAndPassword, 
@@ -34,11 +34,17 @@ export default function Auth() {
       // Fetch or create user doc
       const userRef = doc(db, "users", user.uid);
       let userRole = "user";
-      const userSnap = await getDoc(userRef);
-      if (!userSnap.exists()) {
-        await setDoc(userRef, { email: user.email, role: "user" });
-      } else {
-        userRole = userSnap.data().role || "user";
+      try {
+        const userSnap = await getDoc(userRef);
+        if (!userSnap.exists()) {
+          console.log('Creating new user document for Google sign-in');
+          await setDoc(userRef, { email: user.email, role: "user" });
+        } else {
+          userRole = userSnap.data().role || "user";
+        }
+      } catch (error) {
+        console.error('Error handling user document:', error);
+        handleFirestoreError(error, 'user document creation');
       }
       toast({
         title: "Success",
@@ -244,20 +250,29 @@ export default function Auth() {
     try {
       const userCredential = await createUserWithEmailAndPassword(auth, email, password);
       const user = userCredential.user;
-      // Create user doc in Firestore
-      await setDoc(doc(db, "users", user.uid), {
-        email: user.email,
-        role: "user"
-      });
-      // Create device doc in Firestore for the new user
-      await setDoc(doc(db, "devices", user.uid), {
-        name: `${user.email}'s Device`,
-        status: "active",
-        type: "desktop",
-        usage: 0,
-        user: user.email,
-        ip: "0.0.0.0"
-      });
+      
+      try {
+        console.log('Creating user document for new signup');
+        // Create user doc in Firestore
+        await setDoc(doc(db, "users", user.uid), {
+          email: user.email,
+          role: "user"
+        });
+        
+        console.log('Creating device document for new user');
+        // Create device doc in Firestore for the new user
+        await setDoc(doc(db, "devices", user.uid), {
+          name: `${user.email}'s Device`,
+          status: "active",
+          type: "desktop",
+          usage: 0,
+          user: user.email,
+          ip: "0.0.0.0"
+        });
+      } catch (error) {
+        console.error('Error creating user/device documents:', error);
+        handleFirestoreError(error, 'user/device document creation');
+      }
       toast({
         title: "Success",
         description: "Your account has been created successfully.",

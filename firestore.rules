@@ -1,0 +1,71 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    
+    // Helper function to check if user is admin
+    function isAdmin() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'admin';
+    }
+    
+    // Helper function to check if user is regular user
+    function isRegularUser() {
+      return request.auth != null && 
+        exists(/databases/$(database)/documents/users/$(request.auth.uid)) &&
+        get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'user';
+    }
+    
+    // Helper function to check if user is accessing their own data
+    function isOwnData(userId) {
+      return request.auth != null && request.auth.uid == userId;
+    }
+    
+    // Users collection - Strict role-based access
+    match /users/{userId} {
+      // Regular users can only read/write their own document
+      allow read, write: if isRegularUser() && isOwnData(userId);
+      
+      // Admins can read all user documents but cannot write to them
+      allow read: if isAdmin();
+      
+      // Prevent admins from writing to user documents (maintain data integrity)
+      allow write: if false;
+    }
+    
+    // Devices collection - Strict role-based access
+    match /devices/{deviceId} {
+      // Regular users can only read/write their own device
+      allow read, write: if isRegularUser() && isOwnData(deviceId);
+      
+      // Admins can read/write all device documents
+      allow read, write: if isAdmin();
+    }
+    
+    // UserStats collection - Strict role-based access
+    match /userStats/{userId} {
+      // Regular users can only read/write their own stats
+      allow read, write: if isRegularUser() && isOwnData(userId);
+      
+      // Admins can read all userStats documents
+      allow read: if isAdmin();
+      
+      // Admins cannot write to userStats (maintain data integrity)
+      allow write: if false;
+    }
+    
+    // Bandwidth collection - Admin only access
+    match /bandwidth/{docId} {
+      // Only admins can read/write bandwidth data
+      allow read, write: if isAdmin();
+      
+      // Regular users cannot access bandwidth data
+      allow read, write: if false;
+    }
+    
+    // Default rule - deny all access
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+} 
