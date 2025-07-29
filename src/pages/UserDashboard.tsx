@@ -12,12 +12,13 @@ import {
   Smartphone,
   Laptop,
   Settings,
-  TrendingUp
+  TrendingUp,
+  Wifi
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { db, handleFirestoreError } from "@/lib/firebase";
-import { collection, onSnapshot, query, orderBy, limit, doc, addDoc, serverTimestamp, updateDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, limit, doc, addDoc, serverTimestamp, updateDoc, getDoc } from "firebase/firestore";
 
 const UserDashboard = () => {
   const navigate = useNavigate();
@@ -30,9 +31,32 @@ const UserDashboard = () => {
   const [userProfile, setUserProfile] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [showSampleData, setShowSampleData] = useState(false);
+  const [selectedNetwork, setSelectedNetwork] = useState<string>("");
+  const [networkInfo, setNetworkInfo] = useState<any>(null);
   
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
   const readOnly = user.role === 'admin';
+
+  // Get selected network from sessionStorage
+  useEffect(() => {
+    const networkId = sessionStorage.getItem('selectedNetwork');
+    if (networkId) {
+      setSelectedNetwork(networkId);
+      // Fetch network info from Firestore
+      const fetchNetworkInfo = async () => {
+        try {
+          const networkDoc = doc(db, "virtualNetworks", networkId);
+          const networkSnap = await getDoc(networkDoc);
+          if (networkSnap.exists()) {
+            setNetworkInfo({ id: networkSnap.id, ...networkSnap.data() });
+          }
+        } catch (error) {
+          console.error('Error fetching network info:', error);
+        }
+      };
+      fetchNetworkInfo();
+    }
+  }, []);
 
   // Real-time data collection interval
   const [dataCollectionInterval, setDataCollectionInterval] = useState(null);
@@ -60,14 +84,15 @@ const UserDashboard = () => {
           try {
             await updateDoc(doc(db, "userStats", user.uid), {
               currentUsage: currentUsage,
-              lastUpdated: serverTimestamp()
+              lastUpdated: serverTimestamp(),
+              selectedNetwork: selectedNetwork
             });
           } catch (error) {
             console.error('Error updating userStats:', error);
           }
         }
 
-        // Add to real-time bandwidth collection
+        // Add to real-time bandwidth collection with network info
         await addDoc(collection(db, `userBandwidth/${user.uid}/data`), {
           usage: currentUsage,
           timestamp: serverTimestamp(),
@@ -75,10 +100,12 @@ const UserDashboard = () => {
           userEmail: user.email,
           userId: user.uid,
           source: 'deviceUsage',
-          deviceCount: assignedDevices.length
+          deviceCount: assignedDevices.length,
+          networkId: selectedNetwork,
+          networkName: networkInfo?.name || 'Unknown Network'
         });
 
-        // Add to hourly usage collection
+        // Add to hourly usage collection with network info
         const hourKey = timestamp.toISOString().slice(0, 13) + ':00:00.000Z';
         await addDoc(collection(db, `userHourlyUsage/${user.uid}/data`), {
           hour: hourKey,
@@ -86,10 +113,12 @@ const UserDashboard = () => {
           timestamp: serverTimestamp(),
           createdAt: timestamp,
           userEmail: user.email,
-          source: 'deviceUsage'
+          source: 'deviceUsage',
+          networkId: selectedNetwork,
+          networkName: networkInfo?.name || 'Unknown Network'
         });
 
-        // Add to daily usage collection
+        // Add to daily usage collection with network info
         const dayKey = timestamp.toISOString().slice(0, 10);
         await addDoc(collection(db, `userDailyUsage/${user.uid}/data`), {
           day: dayKey,
@@ -97,7 +126,9 @@ const UserDashboard = () => {
           timestamp: serverTimestamp(),
           createdAt: timestamp,
           userEmail: user.email,
-          source: 'deviceUsage'
+          source: 'deviceUsage',
+          networkId: selectedNetwork,
+          networkName: networkInfo?.name || 'Unknown Network'
         });
 
         // Update device usage if devices are assigned
@@ -106,7 +137,8 @@ const UserDashboard = () => {
             try {
               await updateDoc(doc(db, "devices", device.id), {
                 usage: currentUsage / assignedDevices.length, // Distribute usage across devices
-                lastSeen: serverTimestamp()
+                lastSeen: serverTimestamp(),
+                networkId: selectedNetwork
               });
             } catch (error) {
               console.error('Error updating device usage:', error);
@@ -361,7 +393,20 @@ const UserDashboard = () => {
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
               <Monitor className="h-8 w-8 text-cyan-400" />
-              <h1 className="text-2xl font-bold text-white">My Usage Dashboard</h1>
+              <div>
+                <h1 className="text-2xl font-bold text-white">My Usage Dashboard</h1>
+                {selectedNetwork && networkInfo && (
+                  <div className="flex items-center gap-2 mt-1">
+                    <Wifi className="h-4 w-4 text-blue-400" />
+                    <span className="text-sm text-slate-300">
+                      Connected to: <span className="font-medium text-blue-400">{networkInfo.name}</span>
+                      <span className={`ml-2 w-2 h-2 rounded-full inline-block ${
+                        networkInfo.status === 'active' ? 'bg-green-400' : 'bg-yellow-400'
+                      }`}></span>
+                    </span>
+                  </div>
+                )}
+              </div>
             </div>
             <Button
               variant="outline"
@@ -402,6 +447,19 @@ const UserDashboard = () => {
                   <p className="text-slate-400 text-sm">Department</p>
                   <p className="text-white font-medium">{department}</p>
                 </div>
+                {selectedNetwork && networkInfo && (
+                  <div>
+                    <p className="text-slate-400 text-sm">Connected Network</p>
+                    <div className="flex items-center gap-2">
+                      <Wifi className="h-4 w-4 text-blue-400" />
+                      <span className="text-white font-medium">{networkInfo.name}</span>
+                      <span className={`w-2 h-2 rounded-full ${
+                        networkInfo.status === 'active' ? 'bg-green-400' : 'bg-yellow-400'
+                      }`}></span>
+                    </div>
+                    <p className="text-xs text-slate-400 mt-1">{networkInfo.description}</p>
+                  </div>
+                )}
               </div>
               
               <div className="space-y-4">
