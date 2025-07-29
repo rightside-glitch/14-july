@@ -24,29 +24,20 @@ const Index = () => {
   ];
 
   useEffect(() => {
-    console.log('🔄 Setting up virtual networks listener...');
-    console.log('📍 Current location:', window.location.href);
     setLoading(true);
     
     const unsub = onSnapshot(
       collection(db, "virtualNetworks"),
       (snapshot) => {
-        console.log('📡 Virtual networks snapshot received:', snapshot.docs.length, 'networks');
         const networkData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        console.log('📋 Network data:', networkData);
         setNetworks(networkData);
         setLoading(false);
         setUseFallback(false);
       },
       (error) => {
-        console.error('❌ Virtual networks listener error:', error);
-        console.error('❌ Error code:', error.code);
-        console.error('❌ Error message:', error.message);
         handleFirestoreError(error, 'fetching virtual networks');
         
         // If Firestore access fails, use fallback networks
-        console.log('🔄 Using fallback networks due to Firestore access issue');
-        console.log('📋 Fallback networks:', fallbackNetworks);
         setNetworks(fallbackNetworks);
         setUseFallback(true);
         setLoading(false);
@@ -54,7 +45,6 @@ const Index = () => {
     );
     
     return () => {
-      console.log('🔄 Cleaning up virtual networks listener...');
       unsub();
     };
   }, []);
@@ -103,20 +93,10 @@ const Index = () => {
               <p className="text-slate-300 text-sm">
                 Choose the virtual network you want to connect to and monitor
               </p>
-              {useFallback && (
-                <div className="mt-2 p-2 bg-yellow-500/20 rounded-lg">
-                  <p className="text-xs text-yellow-300">
-                    ⚠️ Using fallback networks. Update Firestore rules for real-time data.
-                  </p>
-                  <p className="text-xs text-yellow-300 mt-1">
-                    🔧 Check browser console (F12) for detailed error information.
-                  </p>
-                </div>
-              )}
               {!useFallback && networks.length > 0 && (
                 <div className="mt-2 p-2 bg-green-500/20 rounded-lg">
                   <p className="text-xs text-green-300">
-                    ✅ Connected to Firestore - Real-time data active
+                    ✅ Real-time data active
                   </p>
                 </div>
               )}
@@ -128,7 +108,7 @@ const Index = () => {
                   <div className="p-4 text-center text-slate-400">Loading virtual networks...</div>
                 ) : currentNetworks.length === 0 ? (
                   <div className="p-4 text-center text-slate-400">
-                    No virtual networks found. Please check Firestore or contact admin.
+                    Loading networks...
                   </div>
                 ) : (
                   <Select value={selectedNetwork} onValueChange={setSelectedNetwork}>
