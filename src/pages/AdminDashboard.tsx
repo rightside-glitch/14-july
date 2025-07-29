@@ -33,6 +33,7 @@ const AdminDashboard = () => {
   const [userCount, setUserCount] = useState(0);
 
   const [userStats, setUserStats] = useState([]);
+  const [totalBandwidthUsage, setTotalBandwidthUsage] = useState(0);
   const [showAddDevice, setShowAddDevice] = useState(false);
   const [newDevice, setNewDevice] = useState({
     name: '',
@@ -118,8 +119,10 @@ const AdminDashboard = () => {
         
         // Calculate total usage from actual user data (only users with 'user' role)
         const totalUsage = userStatsFiltered.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0);
+        setTotalBandwidthUsage(totalUsage);
         
         console.log(`Total bandwidth usage from ${userStatsFiltered.length} users: ${totalUsage.toFixed(2)} GB/h`);
+        console.log('User stats for calculation:', userStatsFiltered.map((stat: any) => ({ email: stat.userEmail, usage: stat.currentUsage })));
       },
       (error) => {
         console.error('UserStats listener error:', error);
@@ -272,13 +275,13 @@ const AdminDashboard = () => {
         
         // Add to global bandwidth collection
         await addDoc(collection(db, "bandwidth"), {
-          totalUsage,
+          totalUsage: totalBandwidthUsage,
           timestamp: serverTimestamp(),
           createdAt: timestamp,
           deviceCount: userStats.length, // Total users
           userCount: userStats.length,
           maxNetworkCapacity: 100, // GB/h
-          totalBandwidthUsage: totalUsage, // GB/h
+          totalBandwidthUsage: totalBandwidthUsage, // GB/h
           source: 'userStats' // Indicate this data comes from user stats
         });
 
@@ -432,7 +435,7 @@ const AdminDashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-slate-400 text-sm">Total Usage (from Users)</p>
-                  <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0)).toFixed(1)} GB/h</p>
+                  <p className="text-2xl font-bold text-white">{totalBandwidthUsage.toFixed(1)} GB/h</p>
                   <p className="text-xs text-slate-500">From {userStats.length} users</p>
                 </div>
                 <TrendingUp className="h-8 w-8 text-green-400" />
@@ -445,7 +448,7 @@ const AdminDashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-slate-400 text-sm">Total Bandwidth Usage</p>
-                  <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0)).toFixed(1)} GB/h</p>
+                  <p className="text-2xl font-bold text-white">{totalBandwidthUsage.toFixed(1)} GB/h</p>
                   <p className="text-xs text-slate-500">100 GB capacity</p>
                 </div>
                 <Shield className="h-8 w-8 text-yellow-400" />
@@ -536,7 +539,7 @@ const AdminDashboard = () => {
               </div>
               <div className="text-center p-4 bg-slate-700/30 rounded-lg">
                 <p className="text-slate-400 text-sm">Total Usage (GB/h)</p>
-                <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0)).toFixed(1)}</p>
+                <p className="text-2xl font-bold text-white">{totalBandwidthUsage.toFixed(1)}</p>
               </div>
               <div className="text-center p-4 bg-slate-700/30 rounded-lg">
                 <p className="text-slate-400 text-sm">Total Used (GB)</p>
@@ -544,7 +547,7 @@ const AdminDashboard = () => {
               </div>
               <div className="text-center p-4 bg-slate-700/30 rounded-lg">
                 <p className="text-slate-400 text-sm">Total Bandwidth</p>
-                <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0)).toFixed(1)} GB/h</p>
+                <p className="text-2xl font-bold text-white">{totalBandwidthUsage.toFixed(1)} GB/h</p>
                 <p className="text-xs text-slate-500">100 GB capacity</p>
               </div>
             </div>
