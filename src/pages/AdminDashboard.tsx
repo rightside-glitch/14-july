@@ -228,8 +228,8 @@ const AdminDashboard = () => {
     (sum, device) => sum + (typeof device.usage === 'number' ? device.usage : 0),
     0
   );
-  // Active devices should match the number of users (one device per user)
-  const activeDevices = userStats.length;
+  // Active devices should match users who have logged into the system
+  const activeDevices = userStats.filter((stat: any) => (stat as any).lastLogin).length;
 
   // Calculate total usage for all active devices
   const totalActiveUsage = devices.filter(device => device.status === 'active').reduce((sum, device) => sum + (typeof device.usage === 'number' ? device.usage : 0), 0);
@@ -280,8 +280,8 @@ const AdminDashboard = () => {
           totalUsage,
           timestamp: serverTimestamp(),
           createdAt: timestamp,
-          deviceCount: userStats.length, // One device per user
-          activeDeviceCount: userStats.length, // Active devices = number of users
+          deviceCount: userStats.length, // Total users
+          activeDeviceCount: userStats.filter((stat: any) => (stat as any).lastLogin).length, // Users who logged in
           userCount: userStats.length,
           maxNetworkCapacity: 100, // GB/h
           networkLoadPercentage: Math.min(100, Math.max(0, (totalUsage / 100) * 100)),
@@ -417,13 +417,14 @@ const AdminDashboard = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
           <Card className="bg-slate-800/50 border-slate-700">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-400 text-sm">Total Users (excluding Admins)</p>
+                  <p className="text-slate-400 text-sm">Active Users</p>
                   <p className="text-2xl font-bold text-white">{userCount}</p>
+                  <p className="text-xs text-slate-500">Total users excluding admins</p>
                 </div>
                 <Users className="h-8 w-8 text-cyan-400" />
               </div>
@@ -434,22 +435,9 @@ const AdminDashboard = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-400 text-sm">Active Users</p>
-                  <p className="text-2xl font-bold text-white">{userStats.length}</p>
-                  <p className="text-xs text-slate-500">Currently online</p>
-                </div>
-                <Activity className="h-8 w-8 text-green-400" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-800/50 border-slate-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
                   <p className="text-slate-400 text-sm">Active Devices</p>
                   <p className="text-2xl font-bold text-white">{activeDevices}</p>
-                  <p className="text-xs text-slate-500">One per user</p>
+                  <p className="text-xs text-slate-500">Users who logged in</p>
                 </div>
                 <Router className="h-8 w-8 text-blue-400" />
               </div>
@@ -633,50 +621,18 @@ const AdminDashboard = () => {
         {/* Active Users */}
         <Card className="bg-slate-800/50 border-slate-700 mb-8">
           <CardHeader>
-            <CardTitle className="text-white">Active Users (Currently Online)</CardTitle>
+            <CardTitle className="text-white">Active Users (Total Users Excluding Admins)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {userStats.length > 0 ? (
-                userStats.map((stat) => (
-                  <div key={stat.id} className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-                        <span className="text-white font-medium">{(stat as any).userEmail || 'Unknown User'}</span>
-                      </div>
-                      <Badge variant="outline" className="border-green-600 text-green-300">
-                        Online
-                      </Badge>
-                      <Badge variant="outline" className="border-slate-600 text-slate-300">
-                        {(stat as any).role || 'user'}
-                      </Badge>
-                    </div>
-                    <div className="flex items-center gap-6">
-                      <div className="text-right">
-                        <p className="text-slate-400 text-sm">Current Usage</p>
-                        <p className="text-white">{((stat as any).currentUsage || 0).toFixed(1)} GB/h</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-slate-400 text-sm">Device</p>
-                        <p className="text-white">{(stat as any).userEmail || 'Unknown'}'s Device</p>
-                      </div>
-                      <div className="text-right">
-                        <p className="text-slate-400 text-sm">Last Activity</p>
-                        <p className="text-white">Now</p>
-                      </div>
-                      <div className="w-32">
-                        <Progress
-                          value={(((stat as any).currentUsage || 0) / 100) * 100}
-                          className="h-2"
-                        />
-                      </div>
-                    </div>
-                  </div>
-                ))
+              {userCount > 0 ? (
+                <div className="text-center py-4">
+                  <p className="text-white text-lg font-semibold">{userCount} Users</p>
+                  <p className="text-slate-400 text-sm">Total registered users excluding administrators</p>
+                </div>
               ) : (
                 <div className="text-center py-8 text-slate-400">
-                  No active users currently online.
+                  No users registered yet.
                 </div>
               )}
             </div>
