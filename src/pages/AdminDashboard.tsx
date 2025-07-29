@@ -118,7 +118,7 @@ const AdminDashboard = () => {
         
         // Calculate total usage from actual user data (only users with 'user' role)
         const totalUsage = userStatsFiltered.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0);
-        const maxNetworkCapacity = 10; // GB/h
+        const maxNetworkCapacity = 100; // GB/h - Total capacity for all users
         const networkLoadPercentage = Math.min(100, Math.max(0, (totalUsage / maxNetworkCapacity) * 100));
         setNetworkLoad(networkLoadPercentage);
         
@@ -228,7 +228,8 @@ const AdminDashboard = () => {
     (sum, device) => sum + (typeof device.usage === 'number' ? device.usage : 0),
     0
   );
-  const activeDevices = displayDevices.filter(device => device.status === 'active').length;
+  // Active devices should match the number of users (one device per user)
+  const activeDevices = userStats.length;
 
   // Calculate total usage for all active devices
   const totalActiveUsage = devices.filter(device => device.status === 'active').reduce((sum, device) => sum + (typeof device.usage === 'number' ? device.usage : 0), 0);
@@ -279,9 +280,11 @@ const AdminDashboard = () => {
           totalUsage,
           timestamp: serverTimestamp(),
           createdAt: timestamp,
-          deviceCount: devices.length,
-          activeDeviceCount: devices.filter(d => d.status === 'active').length,
+          deviceCount: userStats.length, // One device per user
+          activeDeviceCount: userStats.length, // Active devices = number of users
           userCount: userStats.length,
+          maxNetworkCapacity: 100, // GB/h
+          networkLoadPercentage: Math.min(100, Math.max(0, (totalUsage / 100) * 100)),
           source: 'userStats' // Indicate this data comes from user stats
         });
 
@@ -433,6 +436,7 @@ const AdminDashboard = () => {
                 <div>
                   <p className="text-slate-400 text-sm">Active Devices</p>
                   <p className="text-2xl font-bold text-white">{activeDevices}</p>
+                  <p className="text-xs text-slate-500">One per user</p>
                 </div>
                 <Router className="h-8 w-8 text-blue-400" />
               </div>
@@ -458,7 +462,7 @@ const AdminDashboard = () => {
                 <div>
                   <p className="text-slate-400 text-sm">Network Load (Real-time)</p>
                   <p className="text-2xl font-bold text-white">{networkLoad.toFixed(1)}%</p>
-                  <p className="text-xs text-slate-500">Based on user usage</p>
+                  <p className="text-xs text-slate-500">100 GB capacity</p>
                 </div>
                 <TrendingUp className="h-8 w-8 text-yellow-400" />
               </div>
@@ -557,6 +561,7 @@ const AdminDashboard = () => {
               <div className="text-center p-4 bg-slate-700/30 rounded-lg">
                 <p className="text-slate-400 text-sm">Network Load</p>
                 <p className="text-2xl font-bold text-white">{networkLoad.toFixed(1)}%</p>
+                <p className="text-xs text-slate-500">100 GB capacity</p>
               </div>
             </div>
           </CardContent>
