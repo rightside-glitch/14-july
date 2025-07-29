@@ -26,9 +26,11 @@ const UserDashboard = () => {
   const [hourlyUsageData, setHourlyUsageData] = useState([]);
   const [dailyUsageData, setDailyUsageData] = useState([]);
   const [deviceData, setDeviceData] = useState([]);
+  const [assignedDevices, setAssignedDevices] = useState([]);
+  const [userProfile, setUserProfile] = useState({});
   const [isLoading, setIsLoading] = useState(true);
   const [showSampleData, setShowSampleData] = useState(false);
-
+  
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
   const readOnly = user.role === 'admin';
 
@@ -38,17 +40,20 @@ const UserDashboard = () => {
   // Start real-time data collection
   const startDataCollection = async () => {
     if (dataCollectionInterval) return;
-
+    
     const interval = setInterval(async () => {
       try {
-        const currentUsage = Math.random() * 3 + 0.5; // Simulate real usage
+        // Use actual user data instead of random simulation
+        const currentUsage = (userStats as any).currentUsage || Math.random() * 3 + 0.5;
         const timestamp = new Date();
 
         // Add to real-time bandwidth collection
         await addDoc(collection(db, `userBandwidth/${user.uid}/data`), {
           usage: currentUsage,
           timestamp: serverTimestamp(),
-          createdAt: timestamp
+          createdAt: timestamp,
+          userEmail: user.email,
+          userId: user.uid
         });
 
         // Add to hourly usage collection
@@ -57,7 +62,8 @@ const UserDashboard = () => {
           hour: hourKey,
           usage: currentUsage,
           timestamp: serverTimestamp(),
-          createdAt: timestamp
+          createdAt: timestamp,
+          userEmail: user.email
         });
 
         // Add to daily usage collection
@@ -66,7 +72,8 @@ const UserDashboard = () => {
           day: dayKey,
           usage: currentUsage,
           timestamp: serverTimestamp(),
-          createdAt: timestamp
+          createdAt: timestamp,
+          userEmail: user.email
         });
 
       } catch (error) {
@@ -93,16 +100,33 @@ const UserDashboard = () => {
 
     console.log('Setting up UserDashboard listeners for user:', user.uid);
 
-    // Start real-time data collection
-    startDataCollection();
+    // Listen to user profile from users collection
+    const unsubProfile = onSnapshot(
+      doc(db, "users", user.uid),
+      (doc) => {
+        if (doc.exists()) {
+          setUserProfile(doc.data());
+        }
+      },
+      (error) => {
+        console.error('User profile listener error:', error);
+        handleFirestoreError(error, 'user profile listener');
+      }
+    );
 
     // Listen to user stats
     const unsubStats = onSnapshot(
       doc(db, "userStats", user.uid),
       (doc) => {
         if (doc.exists()) {
-          setUserStats(doc.data());
+          const stats = doc.data();
+          setUserStats(stats);
           setShowSampleData(false);
+          
+          // Start data collection with actual user data
+          if (!dataCollectionInterval) {
+            startDataCollection();
+          }
         } else {
           setShowSampleData(true);
         }
@@ -113,6 +137,24 @@ const UserDashboard = () => {
         handleFirestoreError(error, 'user stats listener');
         setShowSampleData(true);
         setIsLoading(false);
+      }
+    );
+
+    // Listen to devices assigned to this user
+    const unsubAssignedDevices = onSnapshot(
+      query(
+        collection(db, "devices"),
+        orderBy("usage", "desc")
+      ),
+      (snapshot) => {
+        const userDevices = snapshot.docs
+          .map(doc => ({ id: doc.id, ...doc.data() }))
+          .filter((device: any) => device.user === user.email);
+        setAssignedDevices(userDevices);
+      },
+      (error) => {
+        console.error('Assigned devices listener error:', error);
+        handleFirestoreError(error, 'assigned devices listener');
       }
     );
 
@@ -148,12 +190,12 @@ const UserDashboard = () => {
           ...doc.data(),
           timestamp: doc.data().timestamp?.toDate?.() || new Date()
         })).reverse();
-
+        
         // Group by hour and aggregate
-        const hourlyData = data.reduce((acc, item) => {
+        const hourlyData = data.reduce((acc: any, item: any) => {
           const hour = new Date(item.hour).getHours();
           const time = `${hour.toString().padStart(2, '0')}:00`;
-
+          
           if (!acc[time]) {
             acc[time] = { time, download: 0, upload: 0, count: 0 };
           }
@@ -164,7 +206,7 @@ const UserDashboard = () => {
         }, {});
 
         // Convert to array and average the values
-        const hourlyArray = Object.values(hourlyData).map(item => ({
+        const hourlyArray = Object.values(hourlyData).map((item: any) => ({
           ...item,
           download: item.download / item.count,
           upload: item.upload / item.count
@@ -190,11 +232,11 @@ const UserDashboard = () => {
           ...doc.data(),
           timestamp: doc.data().timestamp?.toDate?.() || new Date()
         })).reverse();
-
+        
         // Group by day and aggregate
-        const dailyData = data.reduce((acc, item) => {
+        const dailyData = data.reduce((acc: any, item: any) => {
           const day = new Date(item.day).toLocaleDateString('en-US', { weekday: 'short' });
-
+          
           if (!acc[day]) {
             acc[day] = { day, usage: 0, count: 0 };
           }
@@ -204,7 +246,7 @@ const UserDashboard = () => {
         }, {});
 
         // Convert to array and average the values
-        const dailyArray = Object.values(dailyData).map(item => ({
+        const dailyArray = Object.values(dailyData).map((item: any) => ({
           ...item,
           usage: item.usage / item.count
         }));
@@ -217,31 +259,14 @@ const UserDashboard = () => {
       }
     );
 
-    // Listen to user devices
-    const unsubDevices = onSnapshot(
-      query(
-        collection(db, "devices"),
-        orderBy("usage", "desc")
-      ),
-      (snapshot) => {
-        const userDevices = snapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter(device => device.user === user.email);
-        setDeviceData(userDevices);
-      },
-      (error) => {
-        console.error('Devices listener error:', error);
-        handleFirestoreError(error, 'devices listener');
-      }
-    );
-
     return () => {
       stopDataCollection();
+      unsubProfile();
       unsubStats();
+      unsubAssignedDevices();
       unsubBandwidth();
       unsubHourly();
       unsubDaily();
-      unsubDevices();
     };
   }, [user.uid, user.role, navigate]);
 
@@ -252,7 +277,8 @@ const UserDashboard = () => {
     };
   }, []);
 
-  const { currentUsage = 0, usedData = 0, dataLimit = 100 } = userStats;
+  const { currentUsage = 0, usedData = 0, dataLimit = 100 } = userStats as any;
+  const { name = user.email, role = 'user', department = 'General' } = userProfile as any;
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
@@ -284,6 +310,72 @@ const UserDashboard = () => {
       </div>
 
       <div className="container mx-auto px-4 py-8">
+        {/* User Profile & Assigned Data */}
+        <Card className="bg-slate-800/50 border-slate-700 mb-6">
+          <CardHeader>
+            <CardTitle className="text-white">My Profile & Assigned Data</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+              <div className="space-y-4">
+                <div>
+                  <p className="text-slate-400 text-sm">Name</p>
+                  <p className="text-white font-medium">{name}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-sm">Email</p>
+                  <p className="text-white font-medium">{user.email}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-sm">Role</p>
+                  <Badge variant="outline" className="border-slate-600 text-slate-300">
+                    {role}
+                  </Badge>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-sm">Department</p>
+                  <p className="text-white font-medium">{department}</p>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <p className="text-slate-400 text-sm">Assigned Devices</p>
+                  <p className="text-2xl font-bold text-white">{assignedDevices.length}</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-sm">Data Limit</p>
+                  <p className="text-2xl font-bold text-white">{dataLimit} GB</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-sm">Current Usage</p>
+                  <p className="text-2xl font-bold text-white">{currentUsage.toFixed(1)} GB/h</p>
+                </div>
+              </div>
+              
+              <div className="space-y-4">
+                <div>
+                  <p className="text-slate-400 text-sm">Used This Month</p>
+                  <p className="text-2xl font-bold text-white">{usedData.toFixed(1)} GB</p>
+                </div>
+                <div>
+                  <p className="text-slate-400 text-sm">Remaining Data</p>
+                  <p className="text-2xl font-bold text-white">{(dataLimit - usedData).toFixed(1)} GB</p>
+                </div>
+                <div className="w-full">
+                  <Progress
+                    value={(usedData / dataLimit) * 100}
+                    className="h-3"
+                  />
+                  <p className="text-xs text-slate-500 mt-1">
+                    {((usedData / dataLimit) * 100).toFixed(1)}% used
+                  </p>
+                </div>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
         {/* Real-Time Data Collection Status */}
         <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
           <div className="flex items-center justify-between">
@@ -454,15 +546,15 @@ const UserDashboard = () => {
           </Card>
         </div>
 
-        {/* Device Usage */}
+        {/* Assigned Devices */}
         <Card className="bg-slate-800/50 border-slate-700">
           <CardHeader>
-            <CardTitle className="text-white">My Devices</CardTitle>
+            <CardTitle className="text-white">My Assigned Devices</CardTitle>
           </CardHeader>
           <CardContent>
-            {deviceData.length > 0 ? (
+            {assignedDevices.length > 0 ? (
               <div className="space-y-4">
-                {deviceData.map((device) => (
+                {assignedDevices.map((device) => (
                   <div key={device.id} className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
@@ -487,7 +579,7 @@ const UserDashboard = () => {
               </div>
             ) : (
               <div className="text-center py-8 text-slate-400">
-                No devices found for this user.
+                No devices assigned to this user.
               </div>
             )}
           </CardContent>
