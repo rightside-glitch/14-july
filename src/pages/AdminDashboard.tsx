@@ -526,33 +526,7 @@ const AdminDashboard = () => {
           </Card>
         </div>
 
-        {/* Total Usage Summary */}
-        <Card className="bg-slate-800/50 border-slate-700 mb-6">
-          <CardHeader>
-            <CardTitle className="text-white">Total Usage Summary (Live from Users Only)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-              <div className="text-center p-4 bg-slate-700/30 rounded-lg">
-                <p className="text-slate-400 text-sm">Total Users</p>
-                <p className="text-2xl font-bold text-white">{userStats.length}</p>
-              </div>
-              <div className="text-center p-4 bg-slate-700/30 rounded-lg">
-                <p className="text-slate-400 text-sm">Total Usage (GB/h)</p>
-                <p className="text-2xl font-bold text-white">{totalBandwidthUsage.toFixed(1)}</p>
-              </div>
-              <div className="text-center p-4 bg-slate-700/30 rounded-lg">
-                <p className="text-slate-400 text-sm">Total Used (GB)</p>
-                <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat: any) => sum + (stat.usedData || 0), 0)).toFixed(1)}</p>
-              </div>
-              <div className="text-center p-4 bg-slate-700/30 rounded-lg">
-                <p className="text-slate-400 text-sm">Total Bandwidth</p>
-                <p className="text-2xl font-bold text-white">{totalBandwidthUsage.toFixed(1)} GB/h</p>
-                <p className="text-xs text-slate-500">100 GB capacity</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+
 
         {/* User Data Sync */}
         <Card className="bg-slate-800/50 border-slate-700 mb-8">
