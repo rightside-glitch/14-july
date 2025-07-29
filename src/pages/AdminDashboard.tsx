@@ -43,6 +43,21 @@ const AdminDashboard = () => {
   });
   const [isAddingDevice, setIsAddingDevice] = useState(false);
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
+  
+  // Role-based access control
+  useEffect(() => {
+    if (!user.uid) {
+      navigate('/auth');
+      return;
+    }
+    
+    if (user.role !== 'admin') {
+      alert('Access denied. Admin privileges required.');
+      navigate('/');
+      return;
+    }
+  }, [user.uid, user.role, navigate]);
+  
   const readOnly = user.role !== 'admin';
 
   // Listen to Firestore devices collection
@@ -62,13 +77,13 @@ const AdminDashboard = () => {
     return () => unsub();
   }, []);
 
-  // Listen to Firestore users collection for user count (excluding admins)
+  // Listen to Firestore users collection for user count (only users with 'user' role)
   useEffect(() => {
     console.log('Setting up users listener...');
     // Initial fetch in case onSnapshot doesn't fire if collection is empty
     getDocs(collection(db, "users"))
       .then(snapshot => {
-        const regularUsers = snapshot.docs.filter(doc => doc.data().role !== 'admin');
+        const regularUsers = snapshot.docs.filter(doc => doc.data().role === 'user');
         setUserCount(regularUsers.length);
       })
       .catch(error => {
@@ -78,7 +93,7 @@ const AdminDashboard = () => {
     const unsub = onSnapshot(
       collection(db, "users"), 
       (snapshot) => {
-        const regularUsers = snapshot.docs.filter(doc => doc.data().role !== 'admin');
+        const regularUsers = snapshot.docs.filter(doc => doc.data().role === 'user');
         setUserCount(regularUsers.length);
       },
       (error) => {
@@ -88,7 +103,7 @@ const AdminDashboard = () => {
     return () => unsub();
   }, []);
 
-  // Listen to userStats collection to sync with actual user data
+  // Listen to userStats collection to sync with actual user data (only users with 'user' role)
   useEffect(() => {
     console.log('Setting up userStats listener...');
     const unsub = onSnapshot(
@@ -96,13 +111,19 @@ const AdminDashboard = () => {
       (snapshot) => {
         console.log('UserStats snapshot received:', snapshot.docs.length, 'users');
         const stats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
-        setUserStats(stats);
         
-        // Calculate total usage from actual user data
-        const totalUsage = stats.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0);
+        // Filter to only include users with 'user' role
+        const userStatsFiltered = stats.filter((stat: any) => stat.role === 'user' || !stat.role);
+        setUserStats(userStatsFiltered);
+        
+        // Calculate total usage from actual user data (only users with 'user' role)
+        const totalUsage = userStatsFiltered.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0);
         const maxNetworkCapacity = 10; // GB/h
         const networkLoadPercentage = Math.min(100, Math.max(0, (totalUsage / maxNetworkCapacity) * 100));
         setNetworkLoad(networkLoadPercentage);
+        
+        console.log(`Total usage from ${userStatsFiltered.length} users: ${totalUsage.toFixed(2)} GB/h`);
+        console.log(`Network load: ${networkLoadPercentage.toFixed(1)}%`);
       },
       (error) => {
         console.error('UserStats listener error:', error);
@@ -198,8 +219,9 @@ const AdminDashboard = () => {
     { id: 'sample5', name: 'Gaming PC', usage: 3.2, type: 'gaming', status: 'active' }
   ];
 
-  // Use real devices if available, otherwise use sample data
-  const displayDevices = devices.length > 0 ? devices : sampleDevices;
+  // Filter devices to only show those assigned to users with 'user' role
+  const userEmails = userStats.map((stat: any) => stat.userEmail).filter(Boolean);
+  const displayDevices = devices.filter(device => userEmails.includes(device.user));
 
   // Calculate total bandwidth safely
   const totalBandwidth = displayDevices.reduce(
@@ -247,8 +269,9 @@ const AdminDashboard = () => {
     
     dataCollectionRef.current = setInterval(async () => {
       try {
-        // Calculate total usage from actual user data
-        const totalUsage = userStats.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0);
+        // Calculate total usage from actual user data (only users with 'user' role)
+        const userStatsFiltered = userStats.filter((stat: any) => stat.role === 'user' || !stat.role);
+        const totalUsage = userStatsFiltered.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0);
         const timestamp = new Date();
         
         // Add to global bandwidth collection
@@ -263,7 +286,7 @@ const AdminDashboard = () => {
         });
 
         // Add device-specific usage data
-        for (const device of devices) {
+        for (const device of displayDevices) {
           if (device.status === 'active' && device.usage > 0) {
             await addDoc(collection(db, `deviceUsage/${device.id}/data`), {
               usage: device.usage,
@@ -276,9 +299,9 @@ const AdminDashboard = () => {
           }
         }
 
-        // Sync user data to ensure consistency
+        // Sync user data to ensure consistency (only users with 'user' role)
         for (const stat of userStats) {
-          if ((stat as any).currentUsage > 0) {
+          if ((stat as any).currentUsage > 0 && ((stat as any).role === 'user' || !(stat as any).role)) {
                           await addDoc(collection(db, `adminUserSync/${stat.id}/data`), {
                 currentUsage: (stat as any).currentUsage,
                 usedData: (stat as any).usedData,
@@ -422,6 +445,7 @@ const AdminDashboard = () => {
                 <div>
                   <p className="text-slate-400 text-sm">Total Usage (from Users)</p>
                   <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0)).toFixed(1)} GB/h</p>
+                  <p className="text-xs text-slate-500">From {userStats.length} users</p>
                 </div>
                 <Activity className="h-8 w-8 text-green-400" />
               </div>
@@ -432,8 +456,9 @@ const AdminDashboard = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-400 text-sm">Network Load</p>
-                  <p className="text-2xl font-bold text-white">{networkLoadPercentage.toFixed(1)}%</p>
+                  <p className="text-slate-400 text-sm">Network Load (Real-time)</p>
+                  <p className="text-2xl font-bold text-white">{networkLoad.toFixed(1)}%</p>
+                  <p className="text-xs text-slate-500">Based on user usage</p>
                 </div>
                 <TrendingUp className="h-8 w-8 text-yellow-400" />
               </div>
@@ -513,7 +538,7 @@ const AdminDashboard = () => {
         {/* Total Usage Summary */}
         <Card className="bg-slate-800/50 border-slate-700 mb-6">
           <CardHeader>
-            <CardTitle className="text-white">Total Usage Summary (Live from Users)</CardTitle>
+            <CardTitle className="text-white">Total Usage Summary (Live from Users Only)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -540,7 +565,7 @@ const AdminDashboard = () => {
         {/* User Data Sync */}
         <Card className="bg-slate-800/50 border-slate-700 mb-8">
           <CardHeader>
-            <CardTitle className="text-white">User Data Sync (Live from Firestore)</CardTitle>
+            <CardTitle className="text-white">User Data Sync (Live from Firestore - Users Only)</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
@@ -591,7 +616,7 @@ const AdminDashboard = () => {
         <Card className="bg-slate-800/50 border-slate-700">
           <CardHeader>
             <div className="flex items-center justify-between">
-              <CardTitle className="text-white">Device Management</CardTitle>
+              <CardTitle className="text-white">Device Management (Active)</CardTitle>
               {!readOnly && (
                 <Dialog open={showAddDevice} onOpenChange={setShowAddDevice}>
                   <DialogTrigger asChild>
