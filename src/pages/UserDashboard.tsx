@@ -18,7 +18,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { db, handleFirestoreError } from "@/lib/firebase";
-import { collection, onSnapshot, query, orderBy, limit, doc, addDoc, serverTimestamp, updateDoc, getDoc } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, limit, doc, addDoc, serverTimestamp, updateDoc, getDoc, setDoc } from "firebase/firestore";
 
 const UserDashboard = () => {
   const navigate = useNavigate();
@@ -82,11 +82,29 @@ const UserDashboard = () => {
         // Update userStats with current usage
         if (user.uid) {
           try {
-            await updateDoc(doc(db, "userStats", user.uid), {
-              currentUsage: currentUsage,
-              lastUpdated: serverTimestamp(),
-              selectedNetwork: selectedNetwork
-            });
+            const userStatsRef = doc(db, "userStats", user.uid);
+            const userStatsSnap = await getDoc(userStatsRef);
+            
+            if (userStatsSnap.exists()) {
+              // Document exists, update it
+              await updateDoc(userStatsRef, {
+                currentUsage: currentUsage,
+                lastUpdated: serverTimestamp(),
+                selectedNetwork: selectedNetwork
+              });
+            } else {
+              // Document doesn't exist, create it
+              await setDoc(userStatsRef, {
+                userId: user.uid,
+                currentUsage: currentUsage,
+                lastUpdated: serverTimestamp(),
+                selectedNetwork: selectedNetwork,
+                totalDataUsed: 0,
+                isActive: true,
+                networkId: selectedNetwork,
+                networkName: networkInfo?.name || 'Unknown Network'
+              });
+            }
           } catch (error) {
             console.error('Error updating userStats:', error);
           }
