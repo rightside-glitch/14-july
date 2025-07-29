@@ -1,20 +1,72 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { Monitor, Shield, Users, Activity } from "lucide-react";
+import { Monitor, Shield, Users, Activity, Wifi, Globe } from "lucide-react";
 import { useNavigate } from "react-router-dom";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { db, handleFirestoreError } from "@/lib/firebase";
+import { collection, onSnapshot } from "firebase/firestore";
 
 const Index = () => {
   const navigate = useNavigate();
+  const [selectedNetwork, setSelectedNetwork] = useState<string>("");
+  const [networks, setNetworks] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [useFallback, setUseFallback] = useState(false);
+
+  // Fallback networks (same as what's in Firestore)
+  const fallbackNetworks = [
+    { id: "corp-vpn", name: "Corporate VPN", description: "Secure corporate network access", status: "active" },
+    { id: "guest-wifi", name: "Guest WiFi", description: "Public guest network", status: "active" },
+    { id: "iot-network", name: "IoT Network", description: "Internet of Things devices", status: "active" },
+    { id: "dmz", name: "DMZ Network", description: "Demilitarized zone for servers", status: "active" },
+    { id: "backup-vpn", name: "Backup VPN", description: "Secondary VPN connection", status: "maintenance" }
+  ];
+
+  useEffect(() => {
+    console.log('🔄 Setting up virtual networks listener...');
+    setLoading(true);
+    
+    const unsub = onSnapshot(
+      collection(db, "virtualNetworks"),
+      (snapshot) => {
+        console.log('📡 Virtual networks snapshot received:', snapshot.docs.length, 'networks');
+        const networkData = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        console.log('📋 Network data:', networkData);
+        setNetworks(networkData);
+        setLoading(false);
+        setUseFallback(false);
+      },
+      (error) => {
+        console.error('❌ Virtual networks listener error:', error);
+        handleFirestoreError(error, 'fetching virtual networks');
+        
+        // If Firestore access fails, use fallback networks
+        console.log('🔄 Using fallback networks due to Firestore access issue');
+        setNetworks(fallbackNetworks);
+        setUseFallback(true);
+        setLoading(false);
+      }
+    );
+    
+    return () => {
+      console.log('🔄 Cleaning up virtual networks listener...');
+      unsub();
+    };
+  }, []);
 
   const handleDashboardAccess = (type: 'admin' | 'user') => {
-    // Clear any existing session data
+    if (!selectedNetwork) {
+      alert('Please select a virtual network first');
+      return;
+    }
     sessionStorage.clear();
-    // Store the dashboard type in sessionStorage
     sessionStorage.setItem('dashboardType', type);
-    // Navigate to auth page
+    sessionStorage.setItem('selectedNetwork', selectedNetwork);
     navigate('/auth');
   };
+
+  const currentNetworks = useFallback ? fallbackNetworks : networks;
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -32,6 +84,79 @@ const Index = () => {
           <p className="text-xl text-slate-300 max-w-2xl mx-auto">
             Monitor and manage network bandwidth usage across all devices with real-time analytics and comprehensive reporting
           </p>
+        </div>
+
+        {/* Virtual Network Selection */}
+        <div className="max-w-2xl mx-auto mb-12">
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardHeader className="text-center pb-4">
+              <div className="flex justify-center mb-4">
+                <div className="p-3 bg-blue-500/20 rounded-full">
+                  <Wifi className="h-8 w-8 text-blue-400" />
+                </div>
+              </div>
+              <CardTitle className="text-2xl text-white">Select Virtual Network</CardTitle>
+              <p className="text-slate-300 text-sm">
+                Choose the virtual network you want to connect to and monitor
+              </p>
+              {useFallback && (
+                <div className="mt-2 p-2 bg-yellow-500/20 rounded-lg">
+                  <p className="text-xs text-yellow-300">
+                    ⚠️ Using fallback networks. Update Firestore rules for real-time data.
+                  </p>
+                </div>
+              )}
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <label className="text-sm font-medium text-slate-300">Available Networks</label>
+                {loading ? (
+                  <div className="p-4 text-center text-slate-400">Loading virtual networks...</div>
+                ) : currentNetworks.length === 0 ? (
+                  <div className="p-4 text-center text-slate-400">
+                    No virtual networks found. Please check Firestore or contact admin.
+                  </div>
+                ) : (
+                  <Select value={selectedNetwork} onValueChange={setSelectedNetwork}>
+                    <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
+                      <SelectValue placeholder="Select a virtual network..." />
+                    </SelectTrigger>
+                    <SelectContent className="bg-slate-800 border-slate-700">
+                      {currentNetworks.map((network) => (
+                        <SelectItem 
+                          key={network.id} 
+                          value={network.id}
+                          className="text-white hover:bg-slate-700"
+                        >
+                          <div className="flex items-center gap-2">
+                            <Globe className="h-4 w-4" />
+                            <div className="flex flex-col">
+                              <span className="font-medium">{network.name}</span>
+                              <span className="text-xs text-slate-400">{network.description}</span>
+                            </div>
+                            <div className={`ml-auto w-2 h-2 rounded-full ${
+                              network.status === 'active' ? 'bg-green-400' : 'bg-yellow-400'
+                            }`}></div>
+                          </div>
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                )}
+              </div>
+              {selectedNetwork && (
+                <div className="p-3 bg-slate-700/50 rounded-lg">
+                  <div className="flex items-center gap-2 text-sm text-slate-300">
+                    <Globe className="h-4 w-4" />
+                    <span>Selected: </span>
+                    <span className="font-medium text-white">
+                      {currentNetworks.find(n => n.id === selectedNetwork)?.name}
+                    </span>
+                  </div>
+                </div>
+              )}
+            </CardContent>
+          </Card>
         </div>
 
         {/* Interface Selection */}
@@ -66,6 +191,7 @@ const Index = () => {
               <Button 
                 className="mt-6 w-full bg-red-600 hover:bg-red-700 text-white"
                 onClick={() => handleDashboardAccess('admin')}
+                disabled={!selectedNetwork || loading}
               >
                 Access Admin Panel
               </Button>
@@ -102,13 +228,13 @@ const Index = () => {
               <Button 
                 className="mt-6 w-full bg-cyan-600 hover:bg-cyan-700 text-white"
                 onClick={() => handleDashboardAccess('user')}
+                disabled={!selectedNetwork || loading}
               >
                 View My Usage
               </Button>
             </CardContent>
           </Card>
         </div>
-
 
       </div>
     </div>

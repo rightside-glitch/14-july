@@ -1,3 +1,20 @@
+# Update Firestore Rules for Virtual Networks
+
+## Problem
+The virtual networks aren't displaying because Firestore security rules don't allow reading from the `virtualNetworks` collection.
+
+## Solution: Manual Update via Firebase Console
+
+### Step 1: Access Firebase Console
+1. Go to [Firebase Console](https://console.firebase.google.com/)
+2. Select your project: `bandwith-41c0a`
+3. Click on **"Firestore Database"** in the left sidebar
+
+### Step 2: Update Security Rules
+1. Click on the **"Rules"** tab at the top
+2. Replace the existing rules with the following:
+
+```javascript
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
@@ -77,4 +94,28 @@ service cloud.firestore {
       allow read, write: if false;
     }
   }
-} 
+}
+```
+
+### Step 3: Publish Rules
+1. Click **"Publish"** button
+2. Wait for the rules to be deployed (usually takes a few seconds)
+
+### Step 4: Test the App
+1. Refresh your app in the browser
+2. Open browser developer tools (F12)
+3. Check the console for debug messages
+4. The virtual networks should now appear in the dropdown
+
+## Debug Information
+The app now includes console logging to help debug issues:
+- 🔄 Setting up virtual networks listener...
+- 📡 Virtual networks snapshot received: X networks
+- 📋 Network data: [array of networks]
+- ❌ Virtual networks listener error: [error details]
+
+## Expected Result
+After updating the rules, you should see:
+- 5 virtual networks in the dropdown
+- Network status indicators (green for active, yellow for maintenance)
+- Ability to select a network before accessing dashboards 
