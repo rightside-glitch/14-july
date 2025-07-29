@@ -17,7 +17,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { db, handleFirestoreError } from "@/lib/firebase";
-import { collection, onSnapshot, query, orderBy, limit, doc, addDoc, serverTimestamp } from "firebase/firestore";
+import { collection, onSnapshot, query, orderBy, limit, doc, addDoc, serverTimestamp, updateDoc } from "firebase/firestore";
 
 const UserDashboard = () => {
   const navigate = useNavigate();
@@ -43,9 +43,29 @@ const UserDashboard = () => {
     
     const interval = setInterval(async () => {
       try {
-        // Use actual user data instead of random simulation
-        const currentUsage = (userStats as any).currentUsage || Math.random() * 3 + 0.5;
+        // Calculate current usage from assigned devices
+        let deviceUsage = 0;
+        if (assignedDevices.length > 0) {
+          deviceUsage = assignedDevices.reduce((sum: number, device: any) => {
+            return sum + (device.usage || 0);
+          }, 0);
+        }
+
+        // Use actual user data from Firestore, fallback to device usage, then to random
+        const currentUsage = (userStats as any).currentUsage || deviceUsage || Math.random() * 3 + 0.5;
         const timestamp = new Date();
+
+        // Update userStats with current usage
+        if (user.uid) {
+          try {
+            await updateDoc(doc(db, "userStats", user.uid), {
+              currentUsage: currentUsage,
+              lastUpdated: serverTimestamp()
+            });
+          } catch (error) {
+            console.error('Error updating userStats:', error);
+          }
+        }
 
         // Add to real-time bandwidth collection
         await addDoc(collection(db, `userBandwidth/${user.uid}/data`), {
@@ -53,7 +73,9 @@ const UserDashboard = () => {
           timestamp: serverTimestamp(),
           createdAt: timestamp,
           userEmail: user.email,
-          userId: user.uid
+          userId: user.uid,
+          source: 'deviceUsage',
+          deviceCount: assignedDevices.length
         });
 
         // Add to hourly usage collection
@@ -63,7 +85,8 @@ const UserDashboard = () => {
           usage: currentUsage,
           timestamp: serverTimestamp(),
           createdAt: timestamp,
-          userEmail: user.email
+          userEmail: user.email,
+          source: 'deviceUsage'
         });
 
         // Add to daily usage collection
@@ -73,8 +96,23 @@ const UserDashboard = () => {
           usage: currentUsage,
           timestamp: serverTimestamp(),
           createdAt: timestamp,
-          userEmail: user.email
+          userEmail: user.email,
+          source: 'deviceUsage'
         });
+
+        // Update device usage if devices are assigned
+        for (const device of assignedDevices) {
+          if (device.status === 'active') {
+            try {
+              await updateDoc(doc(db, "devices", device.id), {
+                usage: currentUsage / assignedDevices.length, // Distribute usage across devices
+                lastSeen: serverTimestamp()
+              });
+            } catch (error) {
+              console.error('Error updating device usage:', error);
+            }
+          }
+        }
 
       } catch (error) {
         console.error('Error collecting real-time data:', error);
@@ -151,6 +189,23 @@ const UserDashboard = () => {
           .map(doc => ({ id: doc.id, ...doc.data() }))
           .filter((device: any) => device.user === user.email);
         setAssignedDevices(userDevices);
+        
+        // Update current usage based on device usage
+        if (userDevices.length > 0) {
+          const totalDeviceUsage = userDevices.reduce((sum: number, device: any) => {
+            return sum + (device.usage || 0);
+          }, 0);
+          
+          // Update userStats with device usage
+          if (user.uid && totalDeviceUsage > 0) {
+            updateDoc(doc(db, "userStats", user.uid), {
+              currentUsage: totalDeviceUsage,
+              lastUpdated: serverTimestamp()
+            }).catch(error => {
+              console.error('Error updating userStats from devices:', error);
+            });
+          }
+        }
       },
       (error) => {
         console.error('Assigned devices listener error:', error);
@@ -385,14 +440,22 @@ const UserDashboard = () => {
                 Real-time data collection: {dataCollectionInterval ? 'Active' : 'Inactive'}
               </span>
             </div>
-            <Button
-              variant="outline"
-              size="sm"
-              onClick={dataCollectionInterval ? stopDataCollection : startDataCollection}
-              className="border-slate-600 text-slate-300"
-            >
-              {dataCollectionInterval ? 'Stop Collection' : 'Start Collection'}
-            </Button>
+            <div className="flex items-center gap-4">
+              <div className="text-sm text-slate-400">
+                Syncing with {assignedDevices.length} assigned devices
+              </div>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={dataCollectionInterval ? stopDataCollection : startDataCollection}
+                className="border-slate-600 text-slate-300"
+              >
+                {dataCollectionInterval ? 'Stop Collection' : 'Start Collection'}
+              </Button>
+            </div>
+          </div>
+          <div className="mt-2 text-xs text-slate-500">
+            Current usage syncs with: {assignedDevices.length > 0 ? 'Device usage from Firestore' : 'Simulated data'}
           </div>
         </div>
 
