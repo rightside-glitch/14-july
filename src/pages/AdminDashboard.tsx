@@ -228,8 +228,7 @@ const AdminDashboard = () => {
     (sum, device) => sum + (typeof device.usage === 'number' ? device.usage : 0),
     0
   );
-  // Active devices should match users who have logged into the system
-  const activeDevices = userStats.filter((stat: any) => (stat as any).lastLogin).length;
+
 
   // Calculate total usage for all active devices
   const totalActiveUsage = devices.filter(device => device.status === 'active').reduce((sum, device) => sum + (typeof device.usage === 'number' ? device.usage : 0), 0);
@@ -281,7 +280,6 @@ const AdminDashboard = () => {
           timestamp: serverTimestamp(),
           createdAt: timestamp,
           deviceCount: userStats.length, // Total users
-          activeDeviceCount: userStats.filter((stat: any) => (stat as any).lastLogin).length, // Users who logged in
           userCount: userStats.length,
           maxNetworkCapacity: 100, // GB/h
           networkLoadPercentage: Math.min(100, Math.max(0, (totalUsage / 100) * 100)),
@@ -417,7 +415,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card className="bg-slate-800/50 border-slate-700">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -431,18 +429,7 @@ const AdminDashboard = () => {
             </CardContent>
           </Card>
 
-          <Card className="bg-slate-800/50 border-slate-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-slate-400 text-sm">Active Devices</p>
-                  <p className="text-2xl font-bold text-white">{activeDevices}</p>
-                  <p className="text-xs text-slate-500">Users who logged in</p>
-                </div>
-                <Router className="h-8 w-8 text-blue-400" />
-              </div>
-            </CardContent>
-          </Card>
+
 
           <Card className="bg-slate-800/50 border-slate-700">
             <CardContent className="p-6">
