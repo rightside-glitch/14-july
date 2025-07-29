@@ -32,6 +32,7 @@ const AdminDashboard = () => {
   const [devices, setDevices] = useState([]);
   const [userCount, setUserCount] = useState(0);
   const [networkLoad, setNetworkLoad] = useState(0);
+  const [userStats, setUserStats] = useState([]);
   const [showAddDevice, setShowAddDevice] = useState(false);
   const [newDevice, setNewDevice] = useState({
     name: '',
@@ -82,6 +83,30 @@ const AdminDashboard = () => {
       },
       (error) => {
         handleFirestoreError(error, 'users listener');
+      }
+    );
+    return () => unsub();
+  }, []);
+
+  // Listen to userStats collection to sync with actual user data
+  useEffect(() => {
+    console.log('Setting up userStats listener...');
+    const unsub = onSnapshot(
+      collection(db, "userStats"), 
+      (snapshot) => {
+        console.log('UserStats snapshot received:', snapshot.docs.length, 'users');
+        const stats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        setUserStats(stats);
+        
+        // Calculate total usage from actual user data
+        const totalUsage = stats.reduce((sum, stat) => sum + (stat.currentUsage || 0), 0);
+        const maxNetworkCapacity = 10; // GB/h
+        const networkLoadPercentage = Math.min(100, Math.max(0, (totalUsage / maxNetworkCapacity) * 100));
+        setNetworkLoad(networkLoadPercentage);
+      },
+      (error) => {
+        console.error('UserStats listener error:', error);
+        handleFirestoreError(error, 'userStats listener');
       }
     );
     return () => unsub();
@@ -222,7 +247,8 @@ const AdminDashboard = () => {
     
     dataCollectionRef.current = setInterval(async () => {
       try {
-        const totalUsage = devices.reduce((sum, device) => sum + (typeof device.usage === 'number' ? device.usage : 0), 0);
+        // Calculate total usage from actual user data
+        const totalUsage = userStats.reduce((sum, stat) => sum + (stat.currentUsage || 0), 0);
         const timestamp = new Date();
         
         // Add to global bandwidth collection
@@ -231,7 +257,9 @@ const AdminDashboard = () => {
           timestamp: serverTimestamp(),
           createdAt: timestamp,
           deviceCount: devices.length,
-          activeDeviceCount: devices.filter(d => d.status === 'active').length
+          activeDeviceCount: devices.filter(d => d.status === 'active').length,
+          userCount: userStats.length,
+          source: 'userStats' // Indicate this data comes from user stats
         });
 
         // Add device-specific usage data
@@ -244,6 +272,20 @@ const AdminDashboard = () => {
               deviceName: device.name,
               deviceType: device.type,
               user: device.user
+            });
+          }
+        }
+
+        // Sync user data to ensure consistency
+        for (const stat of userStats) {
+          if (stat.currentUsage > 0) {
+            await addDoc(collection(db, `adminUserSync/${stat.id}/data`), {
+              currentUsage: stat.currentUsage,
+              usedData: stat.usedData,
+              dataLimit: stat.dataLimit,
+              timestamp: serverTimestamp(),
+              createdAt: timestamp,
+              userEmail: stat.userEmail
             });
           }
         }
@@ -378,8 +420,8 @@ const AdminDashboard = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-400 text-sm">Total Usage</p>
-                  <p className="text-2xl font-bold text-white">{(Number(totalActiveUsage) || 0).toFixed(1)} GB/h</p>
+                  <p className="text-slate-400 text-sm">Total Usage (from Users)</p>
+                  <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat) => sum + (stat.currentUsage || 0), 0)).toFixed(1)} GB/h</p>
                 </div>
                 <Activity className="h-8 w-8 text-green-400" />
               </div>
@@ -467,6 +509,56 @@ const AdminDashboard = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* User Data Sync */}
+        <Card className="bg-slate-800/50 border-slate-700 mb-8">
+          <CardHeader>
+            <CardTitle className="text-white">User Data Sync (Live from Firestore)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {userStats.length > 0 ? (
+                userStats.map((stat) => (
+                  <div key={stat.id} className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <Users className="h-4 w-4" />
+                        <span className="text-white font-medium">{stat.userEmail || 'Unknown User'}</span>
+                      </div>
+                      <Badge variant="outline" className="border-slate-600 text-slate-300">
+                        {stat.role || 'user'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="text-right">
+                        <p className="text-slate-400 text-sm">Current Usage</p>
+                        <p className="text-white">{(stat.currentUsage || 0).toFixed(1)} GB/h</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-slate-400 text-sm">Used This Month</p>
+                        <p className="text-white">{(stat.usedData || 0).toFixed(1)} GB</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-slate-400 text-sm">Data Limit</p>
+                        <p className="text-white">{stat.dataLimit || 100} GB</p>
+                      </div>
+                      <div className="w-32">
+                        <Progress
+                          value={((stat.usedData || 0) / (stat.dataLimit || 100)) * 100}
+                          className="h-2"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-slate-400">
+                  No user data available. Users need to access their dashboards to generate data.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
 
         {/* Device Management */}
         <Card className="bg-slate-800/50 border-slate-700">
