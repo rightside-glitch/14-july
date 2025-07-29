@@ -417,7 +417,7 @@ const AdminDashboard = () => {
         </div>
 
         {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-4 gap-6 mb-8">
+        <div className="grid grid-cols-1 md:grid-cols-5 gap-6 mb-8">
           <Card className="bg-slate-800/50 border-slate-700">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -426,6 +426,19 @@ const AdminDashboard = () => {
                   <p className="text-2xl font-bold text-white">{userCount}</p>
                 </div>
                 <Users className="h-8 w-8 text-cyan-400" />
+              </div>
+            </CardContent>
+          </Card>
+
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-slate-400 text-sm">Active Users</p>
+                  <p className="text-2xl font-bold text-white">{userStats.length}</p>
+                  <p className="text-xs text-slate-500">Currently online</p>
+                </div>
+                <Activity className="h-8 w-8 text-green-400" />
               </div>
             </CardContent>
           </Card>
@@ -451,7 +464,7 @@ const AdminDashboard = () => {
                   <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0)).toFixed(1)} GB/h</p>
                   <p className="text-xs text-slate-500">From {userStats.length} users</p>
                 </div>
-                <Activity className="h-8 w-8 text-green-400" />
+                <TrendingUp className="h-8 w-8 text-green-400" />
               </div>
             </CardContent>
           </Card>
@@ -464,7 +477,7 @@ const AdminDashboard = () => {
                   <p className="text-2xl font-bold text-white">{networkLoad.toFixed(1)}%</p>
                   <p className="text-xs text-slate-500">100 GB capacity</p>
                 </div>
-                <TrendingUp className="h-8 w-8 text-yellow-400" />
+                <Shield className="h-8 w-8 text-yellow-400" />
               </div>
             </CardContent>
           </Card>
@@ -611,6 +624,59 @@ const AdminDashboard = () => {
               ) : (
                 <div className="text-center py-8 text-slate-400">
                   No user data available. Users need to access their dashboards to generate data.
+                </div>
+              )}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Active Users */}
+        <Card className="bg-slate-800/50 border-slate-700 mb-8">
+          <CardHeader>
+            <CardTitle className="text-white">Active Users (Currently Online)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              {userStats.length > 0 ? (
+                userStats.map((stat) => (
+                  <div key={stat.id} className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-2">
+                        <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+                        <span className="text-white font-medium">{(stat as any).userEmail || 'Unknown User'}</span>
+                      </div>
+                      <Badge variant="outline" className="border-green-600 text-green-300">
+                        Online
+                      </Badge>
+                      <Badge variant="outline" className="border-slate-600 text-slate-300">
+                        {(stat as any).role || 'user'}
+                      </Badge>
+                    </div>
+                    <div className="flex items-center gap-6">
+                      <div className="text-right">
+                        <p className="text-slate-400 text-sm">Current Usage</p>
+                        <p className="text-white">{((stat as any).currentUsage || 0).toFixed(1)} GB/h</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-slate-400 text-sm">Device</p>
+                        <p className="text-white">{(stat as any).userEmail || 'Unknown'}'s Device</p>
+                      </div>
+                      <div className="text-right">
+                        <p className="text-slate-400 text-sm">Last Activity</p>
+                        <p className="text-white">Now</p>
+                      </div>
+                      <div className="w-32">
+                        <Progress
+                          value={(((stat as any).currentUsage || 0) / 100) * 100}
+                          className="h-2"
+                        />
+                      </div>
+                    </div>
+                  </div>
+                ))
+              ) : (
+                <div className="text-center py-8 text-slate-400">
+                  No active users currently online.
                 </div>
               )}
             </div>
