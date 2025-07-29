@@ -109,30 +109,7 @@ const Index = () => {
           </Card>
         </div>
 
-        {/* Stats Overview */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mt-16 max-w-4xl mx-auto">
-          <Card className="bg-slate-800/30 border-slate-700">
-            <CardContent className="text-center py-6">
-              <Users className="h-8 w-8 text-cyan-400 mx-auto mb-2" />
-              <div className="text-2xl font-bold text-white">24</div>
-              <div className="text-slate-400">Active Devices</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-slate-800/30 border-slate-700">
-            <CardContent className="text-center py-6">
-              <Activity className="h-8 w-8 text-green-400 mx-auto mb-2" />
-              <div className="text-2xl font-bold text-white">156.7 GB</div>
-              <div className="text-slate-400">Total Usage Today</div>
-            </CardContent>
-          </Card>
-          <Card className="bg-slate-800/30 border-slate-700">
-            <CardContent className="text-center py-6">
-              <Monitor className="h-8 w-8 text-purple-400 mx-auto mb-2" />
-              <div className="text-2xl font-bold text-white">98.5%</div>
-              <div className="text-slate-400">Network Uptime</div>
-            </CardContent>
-          </Card>
-        </div>
+
       </div>
     </div>
   );
