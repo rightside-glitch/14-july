@@ -31,7 +31,7 @@ const AdminDashboard = () => {
   const [realTimeData, setRealTimeData] = useState([]);
   const [devices, setDevices] = useState([]);
   const [userCount, setUserCount] = useState(0);
-  const [networkLoad, setNetworkLoad] = useState(0);
+
   const [userStats, setUserStats] = useState([]);
   const [showAddDevice, setShowAddDevice] = useState(false);
   const [newDevice, setNewDevice] = useState({
@@ -118,12 +118,8 @@ const AdminDashboard = () => {
         
         // Calculate total usage from actual user data (only users with 'user' role)
         const totalUsage = userStatsFiltered.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0);
-        const maxNetworkCapacity = 100; // GB/h - Total capacity for all users
-        const networkLoadPercentage = Math.min(100, Math.max(0, (totalUsage / maxNetworkCapacity) * 100));
-        setNetworkLoad(networkLoadPercentage);
         
-        console.log(`Total usage from ${userStatsFiltered.length} users: ${totalUsage.toFixed(2)} GB/h`);
-        console.log(`Network load: ${networkLoadPercentage.toFixed(1)}%`);
+        console.log(`Total bandwidth usage from ${userStatsFiltered.length} users: ${totalUsage.toFixed(2)} GB/h`);
       },
       (error) => {
         console.error('UserStats listener error:', error);
@@ -282,7 +278,7 @@ const AdminDashboard = () => {
           deviceCount: userStats.length, // Total users
           userCount: userStats.length,
           maxNetworkCapacity: 100, // GB/h
-          networkLoadPercentage: Math.min(100, Math.max(0, (totalUsage / 100) * 100)),
+          totalBandwidthUsage: totalUsage, // GB/h
           source: 'userStats' // Indicate this data comes from user stats
         });
 
@@ -448,8 +444,8 @@ const AdminDashboard = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-400 text-sm">Network Load (Real-time)</p>
-                  <p className="text-2xl font-bold text-white">{networkLoad.toFixed(1)}%</p>
+                  <p className="text-slate-400 text-sm">Total Bandwidth Usage</p>
+                  <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0)).toFixed(1)} GB/h</p>
                   <p className="text-xs text-slate-500">100 GB capacity</p>
                 </div>
                 <Shield className="h-8 w-8 text-yellow-400" />
@@ -547,8 +543,8 @@ const AdminDashboard = () => {
                 <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat: any) => sum + (stat.usedData || 0), 0)).toFixed(1)}</p>
               </div>
               <div className="text-center p-4 bg-slate-700/30 rounded-lg">
-                <p className="text-slate-400 text-sm">Network Load</p>
-                <p className="text-2xl font-bold text-white">{networkLoad.toFixed(1)}%</p>
+                <p className="text-slate-400 text-sm">Total Bandwidth</p>
+                <p className="text-2xl font-bold text-white">{(userStats.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0)).toFixed(1)} GB/h</p>
                 <p className="text-xs text-slate-500">100 GB capacity</p>
               </div>
             </div>
