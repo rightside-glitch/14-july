@@ -138,6 +138,9 @@ const UserDashboard = () => {
 
     console.log('Setting up UserDashboard listeners for user:', user.uid);
 
+    // Start data collection immediately
+    startDataCollection();
+
     // Listen to user profile from users collection
     const unsubProfile = onSnapshot(
       doc(db, "users", user.uid),
@@ -334,6 +337,14 @@ const UserDashboard = () => {
 
   const { currentUsage = 0, usedData = 0, dataLimit = 100 } = userStats as any;
   const { name = user.email, role = 'user', department = 'General' } = userProfile as any;
+  
+  // Calculate current usage from assigned devices as fallback
+  const deviceUsage = assignedDevices.reduce((sum: number, device: any) => {
+    return sum + (device.usage || 0);
+  }, 0);
+  
+  // Use device usage if userStats currentUsage is not available
+  const displayCurrentUsage = currentUsage > 0 ? currentUsage : deviceUsage;
 
   const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
@@ -404,7 +415,10 @@ const UserDashboard = () => {
                 </div>
                 <div>
                   <p className="text-slate-400 text-sm">Current Usage</p>
-                  <p className="text-2xl font-bold text-white">{currentUsage.toFixed(1)} GB/h</p>
+                  <p className="text-2xl font-bold text-white">{displayCurrentUsage.toFixed(1)} GB/h</p>
+                  <p className="text-xs text-slate-500">
+                    {currentUsage > 0 ? 'From userStats' : deviceUsage > 0 ? 'From devices' : 'Simulated'}
+                  </p>
                 </div>
               </div>
               
@@ -457,6 +471,12 @@ const UserDashboard = () => {
           <div className="mt-2 text-xs text-slate-500">
             Current usage syncs with: {assignedDevices.length > 0 ? 'Device usage from Firestore' : 'Simulated data'}
           </div>
+          <div className="mt-2 text-xs text-slate-400">
+            Debug: userStats={JSON.stringify({ currentUsage, usedData, dataLimit })} | 
+            deviceUsage={deviceUsage.toFixed(2)} | 
+            displayUsage={displayCurrentUsage.toFixed(2)} | 
+            devices={assignedDevices.length}
+          </div>
         </div>
 
         {/* Real-Time Bandwidth Graph */}
@@ -498,7 +518,10 @@ const UserDashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-slate-400 text-sm">Current Usage</p>
-                  <p className="text-2xl font-bold text-white">{currentUsage.toFixed(1)} GB/h</p>
+                  <p className="text-2xl font-bold text-white">{displayCurrentUsage.toFixed(1)} GB/h</p>
+                  <p className="text-xs text-slate-500">
+                    {currentUsage > 0 ? 'From userStats' : deviceUsage > 0 ? 'From devices' : 'Simulated'}
+                  </p>
                 </div>
                 <Activity className="h-8 w-8 text-green-400" />
               </div>
