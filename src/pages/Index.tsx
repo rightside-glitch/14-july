@@ -50,13 +50,15 @@ const Index = () => {
   }, []);
 
   const handleDashboardAccess = (type: 'admin' | 'user') => {
-    if (!selectedNetwork) {
+    if (type === 'user' && !selectedNetwork) {
       alert('Please select a virtual network first');
       return;
     }
     sessionStorage.clear();
     sessionStorage.setItem('dashboardType', type);
-    sessionStorage.setItem('selectedNetwork', selectedNetwork);
+    if (type === 'user') {
+      sessionStorage.setItem('selectedNetwork', selectedNetwork);
+    }
     navigate('/auth');
   };
 
@@ -80,7 +82,7 @@ const Index = () => {
           </p>
         </div>
 
-        {/* Virtual Network Selection */}
+        {/* Virtual Network Selection - Only for Regular Users */}
         <div className="max-w-2xl mx-auto mb-12">
           <Card className="bg-slate-800/50 border-slate-700">
             <CardHeader className="text-center pb-4">
@@ -155,7 +157,8 @@ const Index = () => {
 
         {/* Interface Selection */}
         <div className="grid md:grid-cols-2 gap-8 max-w-4xl mx-auto">
-          <Card className="bg-slate-800/50 border-slate-700 hover:border-cyan-500/50 transition-all duration-300 cursor-pointer group">
+          {/* Admin Dashboard - Direct Access */}
+          <Card className="bg-slate-800/50 border-slate-700 hover:border-red-500/50 transition-all duration-300 cursor-pointer group">
             <CardHeader className="text-center pb-4">
               <div className="flex justify-center mb-4">
                 <div className="p-3 bg-red-500/20 rounded-full group-hover:bg-red-500/30 transition-colors">
@@ -185,13 +188,13 @@ const Index = () => {
               <Button 
                 className="mt-6 w-full bg-red-600 hover:bg-red-700 text-white"
                 onClick={() => handleDashboardAccess('admin')}
-                disabled={!selectedNetwork || loading}
               >
                 Access Admin Panel
               </Button>
             </CardContent>
           </Card>
 
+          {/* User Dashboard - Requires Network Selection */}
           <Card className="bg-slate-800/50 border-slate-700 hover:border-cyan-500/50 transition-all duration-300 cursor-pointer group">
             <CardHeader className="text-center pb-4">
               <div className="flex justify-center mb-4">
