@@ -50,6 +50,29 @@ const UserDashboard = () => {
 
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
 
+  // Fetch available network interfaces only once on mount
+  const [stableInterfaces, setStableInterfaces] = useState<any[]>([]);
+  const [interfacesLoaded, setInterfacesLoaded] = useState(false);
+
+  useEffect(() => {
+    if (!interfacesLoaded) {
+      fetch('http://localhost:3001/api/network/interfaces')
+        .then(res => res.json())
+        .then(data => {
+          if (data.success) {
+            setStableInterfaces(data.data);
+          } else {
+            setStableInterfaces([]);
+          }
+          setInterfacesLoaded(true);
+        })
+        .catch(() => {
+          setStableInterfaces([]);
+          setInterfacesLoaded(true);
+        });
+    }
+  }, [interfacesLoaded]);
+
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';
     const k = 1024;
@@ -144,8 +167,8 @@ const UserDashboard = () => {
       </div>
 
       <div className="container mx-auto px-4 py-8">
-        {/* Real-Time Network Interfaces */}
-        {hasRealData && (
+        {/* Real-Time Network Interfaces (Stable, not auto-refreshing) */}
+        {hasRealData && Array.isArray(stableInterfaces) && stableInterfaces.length > 0 && (
           <div className="mb-8">
             <Card className="bg-slate-800/50 border-slate-700">
               <CardHeader className="text-center pb-4">
@@ -154,35 +177,31 @@ const UserDashboard = () => {
                     <Wifi className="h-8 w-8 text-blue-400" />
                   </div>
                 </div>
-                <CardTitle className="text-2xl text-white">Connected Network Interfaces</CardTitle>
+                <CardTitle className="text-2xl text-white">Available Network Interfaces</CardTitle>
                 <p className="text-slate-300 text-sm">
-                  All currently active network interfaces on this machine (auto-refreshes in real time)
+                  All available network interfaces (stable until page reload)
                 </p>
               </CardHeader>
               <CardContent>
-                {activeInterfaces.length === 0 ? (
-                  <div className="p-4 text-center text-slate-400">No active network interfaces found</div>
-                ) : (
-                  <div className="space-y-3">
-                    {activeInterfaces.map((iface, idx) => (
-                      <div key={iface.iface + idx} className="p-3 bg-slate-700/40 rounded-lg flex flex-col md:flex-row md:items-center md:justify-between gap-2 border border-slate-600">
-                        <div className="flex flex-col md:flex-row md:items-center gap-3 w-full">
-                          <div className="flex items-center gap-2 min-w-[120px]">
-                            <Wifi className="h-5 w-5 text-blue-400" />
-                            <span className="font-medium text-white">{iface.iface}</span>
-                          </div>
-                          <span className="text-xs text-slate-400">Type: {iface.type}</span>
-                          <span className="text-xs text-slate-400">IP: {iface.ip4}</span>
-                          <span className="text-xs text-slate-400">MAC: {iface.mac}</span>
-                          {iface.ssid && <span className="text-xs text-cyan-400">SSID: {iface.ssid}</span>}
-                          {iface.signalStrength && <span className="text-xs text-green-400">Signal: {iface.signalStrength}</span>}
-                          <span className="text-xs text-slate-400">Speed: {iface.speed} Mbps</span>
-                          <span className={`text-xs font-bold ${iface.operstate === 'up' ? 'text-green-400' : 'text-yellow-400'}`}>Status: {iface.operstate === 'up' ? 'Up' : 'Down'}</span>
+                <div className="space-y-3">
+                  {stableInterfaces.map((iface, idx) => (
+                    <div key={iface.iface + idx} className="p-3 bg-slate-700/40 rounded-lg flex flex-col md:flex-row md:items-center md:justify-between gap-2 border border-slate-600">
+                      <div className="flex flex-col md:flex-row md:items-center gap-3 w-full">
+                        <div className="flex items-center gap-2 min-w-[120px]">
+                          <Wifi className="h-5 w-5 text-blue-400" />
+                          <span className="font-medium text-white">{iface.iface}</span>
                         </div>
+                        <span className="text-xs text-slate-400">Type: {iface.type}</span>
+                        <span className="text-xs text-slate-400">IP: {iface.ip4}</span>
+                        <span className="text-xs text-slate-400">MAC: {iface.mac}</span>
+                        {iface.ssid && <span className="text-xs text-cyan-400">SSID: {iface.ssid}</span>}
+                        {iface.signalStrength && <span className="text-xs text-green-400">Signal: {iface.signalStrength}</span>}
+                        <span className="text-xs text-slate-400">Speed: {iface.speed} Mbps</span>
+                        <span className={`text-xs font-bold ${iface.operstate === 'up' ? 'text-green-400' : 'text-yellow-400'}`}>Status: {iface.operstate === 'up' ? 'Up' : 'Down'}</span>
                       </div>
-                    ))}
-                  </div>
-                )}
+                    </div>
+                  ))}
+                </div>
               </CardContent>
             </Card>
           </div>
@@ -350,7 +369,7 @@ const UserDashboard = () => {
         )}
 
         {/* Real-Time Bandwidth Usage Graph */}
-        {hasRealData && bandwidthHistory && bandwidthHistory.length > 0 && (
+        {hasRealData && Array.isArray(bandwidthHistory) && bandwidthHistory.length > 0 && (
           <Card className="mb-8 bg-slate-800/50 border-slate-700">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
