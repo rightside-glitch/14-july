@@ -298,83 +298,36 @@ const AdminDashboard = () => {
   const maxNetworkCapacity = 10; // GB/h
   const networkLoadPercentage = Math.min(100, Math.max(0, (totalActiveUsage / maxNetworkCapacity) * 100));
 
-  // For the real-time bandwidth usage graph, use the sum of 'usage' from all devices
-  const [bandwidthChartData, setBandwidthChartData] = useState([
-    {
-      timestamp: Date.now(),
-      totalUsage: devices.reduce((sum, device) => sum + (typeof device.usage === 'number' ? device.usage : 0), 0)
-    }
-  ]);
+  // Real-time bandwidth chart data from network monitoring
+  const [bandwidthChartData, setBandwidthChartData] = useState([]);
   const intervalRef = useRef<NodeJS.Timeout | undefined>();
   const dataCollectionRef = useRef<NodeJS.Timeout | undefined>();
 
-  // Generate sample data if no real data exists
-  const generateSampleBandwidthData = () => {
-    const now = Date.now();
-    const sampleData = [];
-    for (let i = 59; i >= 0; i--) {
-      const timestamp = now - (i * 1000);
-      const baseUsage = 2.5; // Base usage in GB/h
-      const variation = Math.sin(i * 0.1) * 1.5; // Add some variation
-      sampleData.push({
-        timestamp,
-        totalUsage: Math.max(0, baseUsage + variation)
-      });
-    }
-    return sampleData;
-  };
-
-  // Start real-time data collection for admin dashboard
+  // Start real-time data collection for admin dashboard using real network data
   const startAdminDataCollection = async () => {
     if (dataCollectionRef.current) return;
     
     dataCollectionRef.current = setInterval(async () => {
       try {
-        // Calculate total usage from actual user data (only users with 'user' role)
-        const userStatsFiltered = userStats.filter((stat: any) => stat.role === 'user' || !stat.role);
-        const totalUsage = userStatsFiltered.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0);
-        const timestamp = new Date();
-        
-        // Add to global bandwidth collection
-        await addDoc(collection(db, "bandwidth"), {
-          totalUsage: totalBandwidthUsage,
-          timestamp: serverTimestamp(),
-          createdAt: timestamp,
-          deviceCount: userStats.length, // Total users
-          userCount: userStats.length,
-          maxNetworkCapacity: 100, // GB/h
-          totalBandwidthUsage: totalBandwidthUsage, // GB/h
-          source: 'userStats' // Indicate this data comes from user stats
-        });
-
-        // Add device-specific usage data
-        for (const device of displayDevices) {
-          if (device.status === 'active' && device.usage > 0) {
-            await addDoc(collection(db, `deviceUsage/${device.id}/data`), {
-              usage: device.usage,
-              timestamp: serverTimestamp(),
-              createdAt: timestamp,
-              deviceName: device.name,
-              deviceType: device.type,
-              user: device.user
-            });
-          }
+        // Use real network data instead of simulated data
+        if (hasRealData && currentBandwidth) {
+          const timestamp = new Date();
+          const totalUsage = bandwidthGBh.total; // Use real bandwidth in GB/h
+          
+          // Add to global bandwidth collection with real data
+          await addDoc(collection(db, "bandwidth"), {
+            totalUsage: totalUsage,
+            timestamp: serverTimestamp(),
+            createdAt: timestamp,
+            deviceCount: realUsers.length,
+            userCount: realUsers.length,
+            maxNetworkCapacity: 100, // GB/h
+            totalBandwidthUsage: totalUsage,
+            source: 'realNetworkData',
+            download: bandwidthGBh.download,
+            upload: bandwidthGBh.upload
+          });
         }
-
-        // Sync user data to ensure consistency (only users with 'user' role)
-        for (const stat of userStats) {
-          if ((stat as any).currentUsage > 0 && ((stat as any).role === 'user' || !(stat as any).role)) {
-                          await addDoc(collection(db, `adminUserSync/${stat.id}/data`), {
-                currentUsage: (stat as any).currentUsage,
-                usedData: (stat as any).usedData,
-                dataLimit: (stat as any).dataLimit,
-                timestamp: serverTimestamp(),
-                createdAt: timestamp,
-                userEmail: (stat as any).userEmail
-              });
-          }
-        }
-
       } catch (error) {
         console.error('Error collecting admin real-time data:', error);
       }
@@ -389,41 +342,52 @@ const AdminDashboard = () => {
     }
   };
 
+  // Update bandwidth chart data with real network data
   useEffect(() => {
     // Clear previous interval if any
     if (intervalRef.current) clearInterval(intervalRef.current);
     
-    // If no devices, generate sample data
-    if (devices.length === 0) {
-      console.log('No devices found, generating sample bandwidth data');
-      setBandwidthChartData(generateSampleBandwidthData());
-    } else {
+    if (hasRealData && bandwidthHistory.length > 0) {
+      // Use real bandwidth history data
+      const realChartData = bandwidthHistory.map(entry => ({
+        timestamp: entry.timestamp,
+        totalUsage: (entry.total * 0.45), // Convert to GB/h
+        download: (entry.download * 0.45),
+        upload: (entry.upload * 0.45)
+      }));
+      setBandwidthChartData(realChartData);
+      
+      // Update chart data every 5 seconds with new real data
       intervalRef.current = setInterval(() => {
-        setBandwidthChartData(prev => [
-          ...prev.slice(-59), // keep last 59 points for a 1-minute window
-          {
-            timestamp: Date.now(),
-            totalUsage: devices.reduce((sum, device) => sum + (typeof device.usage === 'number' ? device.usage : 0), 0)
-          }
-        ]);
+        if (hasRealData && currentBandwidth) {
+          setBandwidthChartData(prev => [
+            ...prev.slice(-59), // keep last 59 points for a 1-minute window
+            {
+              timestamp: Date.now(),
+              totalUsage: bandwidthGBh.total,
+              download: bandwidthGBh.download,
+              upload: bandwidthGBh.upload
+            }
+          ]);
+        }
       }, 5000);
     }
     
     return () => {
       if (intervalRef.current) clearInterval(intervalRef.current);
     };
-  }, [devices]);
+  }, [hasRealData, bandwidthHistory, currentBandwidth, bandwidthGBh]);
 
-  // Start admin data collection when devices are loaded
+  // Start admin data collection when real network data is available
   useEffect(() => {
-    if (devices.length > 0) {
+    if (hasRealData) {
       startAdminDataCollection();
     }
     
     return () => {
       stopAdminDataCollection();
     };
-  }, [devices]);
+  }, [hasRealData]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -475,17 +439,28 @@ const AdminDashboard = () => {
           </TabsList>
 
           <TabsContent value="overview" className="space-y-6">
-            {/* Real-Time Data Collection Status */}
+            {/* Real-Time Network Data Status */}
             <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
               <div className="flex items-center justify-between">
                 <div className="flex items-center gap-2">
-                  <div className={`w-3 h-3 rounded-full ${dataCollectionRef.current ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <div className={`w-3 h-3 rounded-full ${hasRealData ? 'bg-green-500' : 'bg-red-500'}`}></div>
                   <span className="text-white">
-                    Real-time data collection: {dataCollectionRef.current ? 'Active' : 'Inactive'}
+                    Real-time network monitoring: {hasRealData ? 'Active' : 'Inactive'}
                   </span>
                 </div>
                 <div className="text-sm text-slate-400">
-                  Collecting data every 5 seconds from {devices.length} devices
+                  {hasRealData ? (
+                    <>
+                      Monitoring {activeInterfaces.length} network interfaces
+                      {currentBandwidth && (
+                        <span className="ml-2">
+                          • Current: {(currentBandwidth.total * 0.45).toFixed(2)} GB/h
+                        </span>
+                      )}
+                    </>
+                  ) : (
+                    'Network monitor server not running'
+                  )}
                 </div>
               </div>
             </div>
@@ -537,10 +512,11 @@ const AdminDashboard = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-400 text-sm">Alerts</p>
-                  <p className="text-2xl font-bold text-white">2</p>
+                  <p className="text-slate-400 text-sm">Network Interfaces</p>
+                  <p className="text-2xl font-bold text-white">{activeInterfaces.length}</p>
+                  <p className="text-xs text-slate-500">Active interfaces</p>
                 </div>
-                <AlertTriangle className="h-8 w-8 text-red-400" />
+                <Activity className="h-8 w-8 text-blue-400" />
               </div>
             </CardContent>
           </Card>
@@ -683,7 +659,23 @@ const AdminDashboard = () => {
                   <YAxis stroke="#9CA3AF" unit=" GB/h" />
                   <Tooltip
                     labelFormatter={ts => new Date(ts).toLocaleString()}
-                    formatter={value => [`${value} GB/h`, 'Total Usage']}
+                    formatter={(value, name) => [`${value} GB/h`, name === 'download' ? 'Download' : name === 'upload' ? 'Upload' : 'Total']}
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="download"
+                    stroke="#3B82F6"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Download"
+                  />
+                  <Line
+                    type="monotone"
+                    dataKey="upload"
+                    stroke="#10B981"
+                    strokeWidth={2}
+                    dot={false}
+                    name="Upload"
                   />
                   <Line
                     type="monotone"
@@ -691,7 +683,7 @@ const AdminDashboard = () => {
                     stroke="#06B6D4"
                     strokeWidth={2}
                     dot={false}
-                    name="Total Usage"
+                    name="Total"
                   />
                 </LineChart>
               </ResponsiveContainer>
@@ -700,13 +692,13 @@ const AdminDashboard = () => {
 
           <Card className="bg-slate-800/50 border-slate-700">
             <CardHeader>
-              <CardTitle className="text-white">Device Usage Distribution</CardTitle>
+              <CardTitle className="text-white">Network Interface Status</CardTitle>
             </CardHeader>
             <CardContent>
               <ResponsiveContainer width="100%" height={300}>
-                <BarChart data={devices}>
+                <BarChart data={activeInterfaces}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis dataKey="name" stroke="#9CA3AF" angle={-45} textAnchor="end" height={100} />
+                  <XAxis dataKey="iface" stroke="#9CA3AF" angle={-45} textAnchor="end" height={100} />
                   <YAxis stroke="#9CA3AF" />
                   <Tooltip
                     contentStyle={{
@@ -714,8 +706,9 @@ const AdminDashboard = () => {
                       border: '1px solid #374151',
                       borderRadius: '8px'
                     }}
+                    formatter={(value, name) => [value, name === 'speed' ? 'Speed (Mbps)' : name]}
                   />
-                  <Bar dataKey="usage" fill="#10B981" isAnimationActive={true} animationDuration={1200} animationEasing="ease-out" />
+                  <Bar dataKey="speed" fill="#3B82F6" isAnimationActive={true} animationDuration={1200} animationEasing="ease-out" />
                 </BarChart>
               </ResponsiveContainer>
             </CardContent>
@@ -724,41 +717,41 @@ const AdminDashboard = () => {
 
 
 
-        {/* User Data Sync */}
+        {/* Real Network Interfaces */}
         <Card className="bg-slate-800/50 border-slate-700 mb-8">
           <CardHeader>
-            <CardTitle className="text-white">User Data Sync (Live from Firestore - Users Only)</CardTitle>
+            <CardTitle className="text-white">Real Network Interfaces</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-4">
-              {userStats.length > 0 ? (
-                userStats.map((stat) => (
-                  <div key={stat.id} className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
+              {hasRealData && activeInterfaces.length > 0 ? (
+                activeInterfaces.map((iface, index) => (
+                  <div key={index} className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
                     <div className="flex items-center gap-4">
                       <div className="flex items-center gap-2">
-                        <Users className="h-4 w-4" />
-                        <span className="text-white font-medium">{(stat as any).userEmail || 'Unknown User'}</span>
+                        <Activity className="h-4 w-4" />
+                        <span className="text-white font-medium">{iface.iface}</span>
                       </div>
                       <Badge variant="outline" className="border-slate-600 text-slate-300">
-                        {(stat as any).role || 'user'}
+                        {iface.type}
                       </Badge>
                     </div>
                     <div className="flex items-center gap-6">
                       <div className="text-right">
-                        <p className="text-slate-400 text-sm">Current Usage</p>
-                        <p className="text-white">{((stat as any).currentUsage || 0).toFixed(1)} GB/h</p>
+                        <p className="text-slate-400 text-sm">IP Address</p>
+                        <p className="text-white font-mono">{iface.ip4}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-slate-400 text-sm">Used This Month</p>
-                        <p className="text-white">{((stat as any).usedData || 0).toFixed(1)} GB</p>
+                        <p className="text-slate-400 text-sm">Status</p>
+                        <p className="text-white">{iface.operstate}</p>
                       </div>
                       <div className="text-right">
-                        <p className="text-slate-400 text-sm">Data Limit</p>
-                        <p className="text-white">{(stat as any).dataLimit || 100} GB</p>
+                        <p className="text-slate-400 text-sm">Speed</p>
+                        <p className="text-white">{iface.speed ? `${iface.speed} Mbps` : 'Unknown'}</p>
                       </div>
                       <div className="w-32">
                         <Progress
-                          value={(((stat as any).usedData || 0) / ((stat as any).dataLimit || 100)) * 100}
+                          value={iface.operstate === 'up' ? 100 : 0}
                           className="h-2"
                         />
                       </div>
@@ -767,7 +760,7 @@ const AdminDashboard = () => {
                 ))
               ) : (
                 <div className="text-center py-8 text-slate-400">
-                  No user data available. Users need to access their dashboards to generate data.
+                  {hasRealData ? 'No network interfaces found' : 'Network monitor server not running'}
                 </div>
               )}
             </div>
