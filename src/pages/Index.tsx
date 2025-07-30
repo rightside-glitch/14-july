@@ -26,7 +26,6 @@ const Index = () => {
   const [loadingNetworks, setLoadingNetworks] = useState(true);
 
   useEffect(() => {
-    let interval: NodeJS.Timeout;
     const fetchNetworks = async () => {
       setLoadingNetworks(true);
       try {
@@ -43,8 +42,7 @@ const Index = () => {
       setLoadingNetworks(false);
     };
     fetchNetworks();
-    interval = setInterval(fetchNetworks, 5000);
-    return () => clearInterval(interval);
+    // Removed interval for auto-refresh
   }, []);
 
   // Remove realNetworks, networks, currentNetworks, and useFallback logic
@@ -84,9 +82,7 @@ const Index = () => {
                 </div>
               </div>
               <CardTitle className="text-2xl text-white">Available Network Interfaces</CardTitle>
-              <p className="text-slate-300 text-sm">
-                All currently detected network interfaces (auto-refreshes every 5 seconds)
-              </p>
+              <p className="text-slate-300 text-sm">All currently detected network interfaces (stable until page reload)</p>
             </CardHeader>
             <CardContent>
               {loadingNetworks ? (
