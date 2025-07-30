@@ -145,7 +145,7 @@ const UserDashboard = () => {
 
       <div className="container mx-auto px-4 py-8">
         {/* Real-Time Network Interfaces */}
-        {hasRealData && activeInterfaces && (
+        {hasRealData && (
           <div className="mb-8">
             <Card className="bg-slate-800/50 border-slate-700">
               <CardHeader className="text-center pb-4">
@@ -156,7 +156,7 @@ const UserDashboard = () => {
                 </div>
                 <CardTitle className="text-2xl text-white">Connected Network Interfaces</CardTitle>
                 <p className="text-slate-300 text-sm">
-                  All currently active network interfaces on this machine
+                  All currently active network interfaces on this machine (auto-refreshes in real time)
                 </p>
               </CardHeader>
               <CardContent>
@@ -166,20 +166,18 @@ const UserDashboard = () => {
                   <div className="space-y-3">
                     {activeInterfaces.map((iface, idx) => (
                       <div key={iface.iface + idx} className="p-3 bg-slate-700/40 rounded-lg flex flex-col md:flex-row md:items-center md:justify-between gap-2 border border-slate-600">
-                        <div className="flex items-center gap-3">
-                          <Wifi className="h-5 w-5 text-blue-400" />
-                          <span className="font-medium text-white">{iface.iface}</span>
-                          <span className="text-xs text-slate-400">{iface.type}</span>
+                        <div className="flex flex-col md:flex-row md:items-center gap-3 w-full">
+                          <div className="flex items-center gap-2 min-w-[120px]">
+                            <Wifi className="h-5 w-5 text-blue-400" />
+                            <span className="font-medium text-white">{iface.iface}</span>
+                          </div>
+                          <span className="text-xs text-slate-400">Type: {iface.type}</span>
+                          <span className="text-xs text-slate-400">IP: {iface.ip4}</span>
+                          <span className="text-xs text-slate-400">MAC: {iface.mac}</span>
                           {iface.ssid && <span className="text-xs text-cyan-400">SSID: {iface.ssid}</span>}
                           {iface.signalStrength && <span className="text-xs text-green-400">Signal: {iface.signalStrength}</span>}
-                          <span className="text-xs text-slate-400">IP: {iface.ip4}</span>
-                          <span className={`ml-2 w-2 h-2 rounded-full ${iface.operstate === 'up' ? 'bg-green-400' : 'bg-yellow-400'}`}></span>
-                        </div>
-                        <div className="flex gap-2 text-xs text-slate-400">
-                          {iface.connectionType && <span>{iface.connectionType}</span>}
-                          {iface.maxBandwidth && <span>Max: {iface.maxBandwidth}</span>}
-                          <span>MAC: {iface.mac}</span>
-                          <span>Speed: {iface.speed} Mbps</span>
+                          <span className="text-xs text-slate-400">Speed: {iface.speed} Mbps</span>
+                          <span className={`text-xs font-bold ${iface.operstate === 'up' ? 'text-green-400' : 'text-yellow-400'}`}>Status: {iface.operstate === 'up' ? 'Up' : 'Down'}</span>
                         </div>
                       </div>
                     ))}
@@ -345,6 +343,38 @@ const UserDashboard = () => {
                     name="Upload"
                     dot={false}
                   />
+                </LineChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* Real-Time Bandwidth Usage Graph */}
+        {hasRealData && bandwidthHistory && bandwidthHistory.length > 0 && (
+          <Card className="mb-8 bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <TrendingUp className="h-5 w-5 text-cyan-400" />
+                Bandwidth Usage (Real-Time)
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={bandwidthHistory}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis
+                    dataKey="timestamp"
+                    stroke="#9CA3AF"
+                    tickFormatter={ts => new Date(ts).toLocaleTimeString()}
+                  />
+                  <YAxis stroke="#9CA3AF" unit=" Mbps" />
+                  <Tooltip
+                    labelFormatter={ts => new Date(ts).toLocaleString()}
+                    formatter={(value, name) => [`${value} Mbps`, name.charAt(0).toUpperCase() + name.slice(1)]}
+                  />
+                  <Line type="monotone" dataKey="download" stroke="#3B82F6" strokeWidth={2} dot={false} name="Download" />
+                  <Line type="monotone" dataKey="upload" stroke="#10B981" strokeWidth={2} dot={false} name="Upload" />
+                  <Line type="monotone" dataKey="total" stroke="#06B6D4" strokeWidth={2} dot={false} name="Total" />
                 </LineChart>
               </ResponsiveContainer>
             </CardContent>
