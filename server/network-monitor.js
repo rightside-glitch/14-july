@@ -192,35 +192,71 @@ app.get('/api/network/bandwidth', async (req, res) => {
   }
 });
 
-// Get system information
+// Get detailed system information including machine type
 app.get('/api/system/info', async (req, res) => {
   try {
-    const [cpu, mem, os] = await Promise.all([
+    const [cpu, mem, os, system, disk, graphics] = await Promise.all([
       si.cpu(),
       si.mem(),
-      si.osInfo()
+      si.osInfo(),
+      si.system(),
+      si.diskLayout(),
+      si.graphics()
     ]);
 
     res.json({
       success: true,
       data: {
+        machine: {
+          manufacturer: system.manufacturer,
+          model: system.model,
+          version: system.version,
+          serial: system.serial,
+          uuid: system.uuid,
+          sku: system.sku,
+          virtual: system.virtual
+        },
         cpu: {
           manufacturer: cpu.manufacturer,
           brand: cpu.brand,
           cores: cpu.cores,
-          physicalCores: cpu.physicalCores
+          physicalCores: cpu.physicalCores,
+          speed: cpu.speed,
+          cache: cpu.cache
         },
         memory: {
           total: mem.total,
           used: mem.used,
           free: mem.free,
-          active: mem.active
+          active: mem.active,
+          available: mem.available
         },
         os: {
           platform: os.platform,
           distro: os.distro,
           release: os.release,
-          arch: os.arch
+          arch: os.arch,
+          hostname: os.hostname,
+          codename: os.codename,
+          kernel: os.kernel,
+          build: os.build
+        },
+        storage: {
+          disks: disk.map(d => ({
+            device: d.device,
+            type: d.type,
+            name: d.name,
+            size: d.size,
+            serial: d.serial
+          }))
+        },
+        graphics: {
+          controllers: graphics.controllers.map(g => ({
+            model: g.model,
+            vendor: g.vendor,
+            vram: g.vram,
+            driverVersion: g.driverVersion
+          }))
         }
       }
     });
@@ -229,6 +265,118 @@ app.get('/api/system/info', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to get system information'
+    });
+  }
+});
+
+// Email validation endpoint
+app.post('/api/validate/email', async (req, res) => {
+  try {
+    const { email } = req.body;
+    
+    if (!email) {
+      return res.status(400).json({
+        success: false,
+        error: 'Email is required'
+      });
+    }
+
+    // Basic email format validation
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailRegex.test(email)) {
+      return res.json({
+        success: true,
+        data: {
+          email,
+          isValid: false,
+          reason: 'Invalid email format',
+          type: 'fake'
+        }
+      });
+    }
+
+    // Check for common fake email patterns
+    const fakePatterns = [
+      /^test@/i,
+      /^admin@/i,
+      /^user@/i,
+      /^demo@/i,
+      /^example@/i,
+      /^fake@/i,
+      /^dummy@/i,
+      /@test\./i,
+      /@example\./i,
+      /@fake\./i,
+      /@dummy\./i,
+      /@localhost/i,
+      /@127\.0\.0\.1/i,
+      /@192\.168\./i,
+      /@10\./i,
+      /@172\.(1[6-9]|2[0-9]|3[0-1])\./i,
+      /^[a-z]{1,3}@[a-z]{1,3}\.[a-z]{1,3}$/i, // Too short
+      /^[a-z]+@[a-z]+\.[a-z]+$/i, // Generic pattern
+    ];
+
+    const isFake = fakePatterns.some(pattern => pattern.test(email));
+    
+    // Check for disposable email domains
+    const disposableDomains = [
+      'tempmail.org', '10minutemail.com', 'guerrillamail.com',
+      'mailinator.com', 'yopmail.com', 'throwaway.email',
+      'temp-mail.org', 'sharklasers.com', 'getairmail.com',
+      'mailnesia.com', 'maildrop.cc', 'mailcatch.com',
+      'mailmetrash.com', 'trashmail.com', 'spam4.me',
+      'bccto.me', 'chacuo.net', 'dispostable.com',
+      'fakeinbox.com', 'mailnull.com', 'spamspot.com'
+    ];
+
+    const domain = email.split('@')[1]?.toLowerCase();
+    const isDisposable = disposableDomains.includes(domain);
+
+    // Check for real email characteristics
+    const realEmailIndicators = [
+      email.includes('.') && email.split('@')[1]?.includes('.'),
+      email.length > 10,
+      !email.includes('test'),
+      !email.includes('admin'),
+      !email.includes('user'),
+      !email.includes('demo'),
+      !email.includes('example'),
+      !email.includes('fake'),
+      !email.includes('dummy'),
+      !isDisposable
+    ];
+
+    const realScore = realEmailIndicators.filter(Boolean).length;
+    const isLikelyReal = realScore >= 7 && !isFake && !isDisposable;
+
+    res.json({
+      success: true,
+      data: {
+        email,
+        isValid: true,
+        type: isLikelyReal ? 'real' : 'fake',
+        confidence: isLikelyReal ? 'high' : 'low',
+        reasons: {
+          isFake,
+          isDisposable,
+          realScore,
+          indicators: {
+            hasValidFormat: emailRegex.test(email),
+            hasValidDomain: email.includes('.') && email.split('@')[1]?.includes('.'),
+            hasReasonableLength: email.length > 10,
+            notTestEmail: !email.includes('test'),
+            notDisposable: !isDisposable
+          }
+        }
+      }
+    });
+
+  } catch (error) {
+    console.error('Error in email validation:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to validate email'
     });
   }
 });

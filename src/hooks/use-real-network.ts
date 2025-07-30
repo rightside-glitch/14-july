@@ -34,24 +34,78 @@ interface NetworkStats {
   }>;
 }
 
+interface MachineInfo {
+  manufacturer: string;
+  model: string;
+  version: string;
+  serial: string;
+  uuid: string;
+  sku: string;
+  virtual: boolean;
+}
+
 interface SystemInfo {
+  machine: MachineInfo;
   cpu: {
     manufacturer: string;
     brand: string;
     cores: number;
     physicalCores: number;
+    speed: number;
+    cache: any;
   };
   memory: {
     total: number;
     used: number;
     free: number;
     active: number;
+    available: number;
   };
   os: {
     platform: string;
     distro: string;
     release: string;
     arch: string;
+    hostname: string;
+    codename: string;
+    kernel: string;
+    build: string;
+  };
+  storage: {
+    disks: Array<{
+      device: string;
+      type: string;
+      name: string;
+      size: number;
+      serial: string;
+    }>;
+  };
+  graphics: {
+    controllers: Array<{
+      model: string;
+      vendor: string;
+      vram: number;
+      driverVersion: string;
+    }>;
+  };
+}
+
+interface EmailValidationResult {
+  email: string;
+  isValid: boolean;
+  type: 'real' | 'fake';
+  confidence: 'high' | 'low';
+  reasons: {
+    isFake: boolean;
+    isDisposable: boolean;
+    realScore: number;
+    indicators: {
+      hasValidFormat: boolean;
+      hasValidDomain: boolean;
+      hasReasonableLength: boolean;
+      notTestEmail: boolean;
+      notDisposable: boolean;
+    };
   };
 }
 
@@ -139,6 +193,34 @@ export const useRealNetwork = () => {
       }
     } catch (err) {
       console.error('Error fetching bandwidth data:', err);
+      return null;
+    }
+  }, []);
+
+  // Validate email
+  const validateEmail = useCallback(async (email: string): Promise<EmailValidationResult | null> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/validate/email`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ email }),
+      });
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        return data.data;
+      } else {
+        throw new Error(data.error || 'Failed to validate email');
+      }
+    } catch (err) {
+      console.error('Error validating email:', err);
       return null;
     }
   }, []);
@@ -255,6 +337,7 @@ export const useRealNetwork = () => {
     fetchNetworkStatus,
     fetchSystemInfo,
     fetchBandwidth,
+    validateEmail,
     checkServerHealth,
     
     // Utilities

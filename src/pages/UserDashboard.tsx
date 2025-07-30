@@ -9,37 +9,22 @@ import {
   Download,
   Upload,
   Home,
-  Smartphone,
-  Laptop,
-  Settings,
-  TrendingUp,
-  Wifi,
   Server,
-  AlertCircle
+  AlertCircle,
+  Wifi,
+  Cpu,
+  MemoryStick,
+  HardDrive,
+  TrendingUp
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
-import { db, handleFirestoreError } from "@/lib/firebase";
-import { collection, onSnapshot, query, orderBy, limit, doc, addDoc, serverTimestamp, updateDoc, getDoc, setDoc } from "firebase/firestore";
+import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useRealNetwork } from "@/hooks/use-real-network";
+import { MachineInfo } from "@/components/MachineInfo";
 
 const UserDashboard = () => {
   const navigate = useNavigate();
-  const [userStats, setUserStats] = useState({});
-  const [userBandwidthData, setUserBandwidthData] = useState([]);
-  const [hourlyUsageData, setHourlyUsageData] = useState([]);
-  const [dailyUsageData, setDailyUsageData] = useState([]);
-  const [deviceData, setDeviceData] = useState([]);
-  const [assignedDevices, setAssignedDevices] = useState([]);
-  const [userProfile, setUserProfile] = useState({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [showSampleData, setShowSampleData] = useState(false);
-  const [selectedNetwork, setSelectedNetwork] = useState<string>("");
-  const [networkInfo, setNetworkInfo] = useState<any>(null);
   
-  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
-  const readOnly = user.role === 'admin';
-
   // Real network data hook
   const {
     networkStatus,
@@ -51,383 +36,39 @@ const UserDashboard = () => {
     bandwidthHistory,
     activeInterfaces,
     bandwidthGBh,
-    hasRealData
+    hasRealData,
+    validateEmail
   } = useRealNetwork();
 
-  // Get selected network from sessionStorage
-  useEffect(() => {
-    const networkId = sessionStorage.getItem('selectedNetwork');
-    if (networkId) {
-      setSelectedNetwork(networkId);
-      // Fetch network info from Firestore
-      const fetchNetworkInfo = async () => {
-        try {
-          const networkDoc = doc(db, "virtualNetworks", networkId);
-          const networkSnap = await getDoc(networkDoc);
-          if (networkSnap.exists()) {
-            setNetworkInfo({ id: networkSnap.id, ...networkSnap.data() });
-          }
-        } catch (error) {
-          console.error('Error fetching network info:', error);
-        }
-      };
-      fetchNetworkInfo();
-    }
-  }, []);
+  const user = JSON.parse(sessionStorage.getItem('user') || '{}');
 
-  // Real-time data collection interval
-  const [dataCollectionInterval, setDataCollectionInterval] = useState(null);
+  const formatBytes = (bytes: number) => {
+    if (bytes === 0) return '0 Bytes';
+    const k = 1024;
+    const sizes = ['Bytes', 'KB', 'MB', 'GB', 'TB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i];
+  };
 
-  // Start real-time data collection
-  const startDataCollection = async () => {
-    if (dataCollectionInterval) return;
+  const getMachineType = () => {
+    if (!systemInfo?.machine) return 'Unknown';
     
-    const interval = setInterval(async () => {
-      try {
-        // Use real network data if available, otherwise fallback to existing logic
-        let currentUsage = 0;
-        
-        if (hasRealData && bandwidthGBh) {
-          // Use real network bandwidth data
-          currentUsage = bandwidthGBh.total;
-        } else {
-          // Fallback to existing logic
-          let deviceUsage = 0;
-          if (assignedDevices.length > 0) {
-            deviceUsage = assignedDevices.reduce((sum: number, device: any) => {
-              return sum + (device.usage || 0);
-            }, 0);
-          }
-          currentUsage = (userStats as any).currentUsage || deviceUsage || Math.random() * 3 + 0.5;
-        }
-        const timestamp = new Date();
-
-        // Update userStats with current usage
-        if (user.uid) {
-          try {
-            const userStatsRef = doc(db, "userStats", user.uid);
-            const userStatsSnap = await getDoc(userStatsRef);
-            
-            if (userStatsSnap.exists()) {
-              // Document exists, update it
-              await updateDoc(userStatsRef, {
-                currentUsage: currentUsage,
-                lastUpdated: serverTimestamp(),
-                selectedNetwork: selectedNetwork
-              });
-            } else {
-              // Document doesn't exist, create it
-              await setDoc(userStatsRef, {
-                userId: user.uid,
-                currentUsage: currentUsage,
-                lastUpdated: serverTimestamp(),
-                selectedNetwork: selectedNetwork,
-                totalDataUsed: 0,
-                isActive: true,
-                networkId: selectedNetwork,
-                networkName: networkInfo?.name || 'Unknown Network'
-              });
-            }
-          } catch (error) {
-            console.error('Error updating userStats:', error);
-          }
-        }
-
-        // Add to real-time bandwidth collection with network info
-        await addDoc(collection(db, `userBandwidth/${user.uid}/data`), {
-          usage: currentUsage,
-          timestamp: serverTimestamp(),
-          createdAt: timestamp,
-          userEmail: user.email,
-          userId: user.uid,
-          source: 'deviceUsage',
-          deviceCount: assignedDevices.length,
-          networkId: selectedNetwork,
-          networkName: networkInfo?.name || 'Unknown Network'
-        });
-
-        // Add to hourly usage collection with network info
-        const hourKey = timestamp.toISOString().slice(0, 13) + ':00:00.000Z';
-        await addDoc(collection(db, `userHourlyUsage/${user.uid}/data`), {
-          hour: hourKey,
-          usage: currentUsage,
-          timestamp: serverTimestamp(),
-          createdAt: timestamp,
-          userEmail: user.email,
-          source: 'deviceUsage',
-          networkId: selectedNetwork,
-          networkName: networkInfo?.name || 'Unknown Network'
-        });
-
-        // Add to daily usage collection with network info
-        const dayKey = timestamp.toISOString().slice(0, 10);
-        await addDoc(collection(db, `userDailyUsage/${user.uid}/data`), {
-          day: dayKey,
-          usage: currentUsage,
-          timestamp: serverTimestamp(),
-          createdAt: timestamp,
-          userEmail: user.email,
-          source: 'deviceUsage',
-          networkId: selectedNetwork,
-          networkName: networkInfo?.name || 'Unknown Network'
-        });
-
-        // Update device usage if devices are assigned
-        for (const device of assignedDevices) {
-          if (device.status === 'active') {
-            try {
-              await updateDoc(doc(db, "devices", device.id), {
-                usage: currentUsage / assignedDevices.length, // Distribute usage across devices
-                lastSeen: serverTimestamp(),
-                networkId: selectedNetwork
-              });
-            } catch (error) {
-              console.error('Error updating device usage:', error);
-            }
-          }
-        }
-
-      } catch (error) {
-        console.error('Error collecting real-time data:', error);
-      }
-    }, 5000); // Collect data every 5 seconds
-
-    setDataCollectionInterval(interval);
+    const { manufacturer, model, virtual } = systemInfo.machine;
+    
+    if (virtual) return 'Virtual Machine';
+    if (manufacturer?.toLowerCase().includes('dell')) return 'Dell Computer';
+    if (manufacturer?.toLowerCase().includes('hp')) return 'HP Computer';
+    if (manufacturer?.toLowerCase().includes('lenovo')) return 'Lenovo Computer';
+    if (manufacturer?.toLowerCase().includes('asus')) return 'ASUS Computer';
+    if (manufacturer?.toLowerCase().includes('acer')) return 'Acer Computer';
+    if (manufacturer?.toLowerCase().includes('apple')) return 'Apple Mac';
+    if (manufacturer?.toLowerCase().includes('microsoft')) return 'Microsoft Surface';
+    
+    return `${manufacturer} ${model}`;
   };
-
-  // Stop data collection
-  const stopDataCollection = () => {
-    if (dataCollectionInterval) {
-      clearInterval(dataCollectionInterval);
-      setDataCollectionInterval(null);
-    }
-  };
-
-  useEffect(() => {
-    if (!user.uid) {
-      navigate('/auth');
-      return;
-    }
-
-    console.log('Setting up UserDashboard listeners for user:', user.uid);
-
-    // Start data collection immediately
-    startDataCollection();
-
-    // Listen to user profile from users collection
-    const unsubProfile = onSnapshot(
-      doc(db, "users", user.uid),
-      (doc) => {
-        if (doc.exists()) {
-          setUserProfile(doc.data());
-        }
-      },
-      (error) => {
-        console.error('User profile listener error:', error);
-        handleFirestoreError(error, 'user profile listener');
-      }
-    );
-
-    // Listen to user stats
-    const unsubStats = onSnapshot(
-      doc(db, "userStats", user.uid),
-      (doc) => {
-        if (doc.exists()) {
-          const stats = doc.data();
-          setUserStats(stats);
-          setShowSampleData(false);
-          
-          // Start data collection with actual user data
-          if (!dataCollectionInterval) {
-            startDataCollection();
-          }
-        } else {
-          setShowSampleData(true);
-        }
-        setIsLoading(false);
-      },
-      (error) => {
-        console.error('User stats listener error:', error);
-        handleFirestoreError(error, 'user stats listener');
-        setShowSampleData(true);
-        setIsLoading(false);
-      }
-    );
-
-    // Listen to devices assigned to this user
-    const unsubAssignedDevices = onSnapshot(
-      query(
-        collection(db, "devices"),
-        orderBy("usage", "desc")
-      ),
-      (snapshot) => {
-        const userDevices = snapshot.docs
-          .map(doc => ({ id: doc.id, ...doc.data() }))
-          .filter((device: any) => device.user === user.email);
-        setAssignedDevices(userDevices);
-        
-        // Update current usage based on device usage
-        if (userDevices.length > 0) {
-          const totalDeviceUsage = userDevices.reduce((sum: number, device: any) => {
-            return sum + (device.usage || 0);
-          }, 0);
-          
-          // Update userStats with device usage
-          if (user.uid && totalDeviceUsage > 0) {
-            updateDoc(doc(db, "userStats", user.uid), {
-              currentUsage: totalDeviceUsage,
-              lastUpdated: serverTimestamp()
-            }).catch(error => {
-              console.error('Error updating userStats from devices:', error);
-            });
-          }
-        }
-      },
-      (error) => {
-        console.error('Assigned devices listener error:', error);
-        handleFirestoreError(error, 'assigned devices listener');
-      }
-    );
-
-    // Listen to real-time bandwidth data
-    const unsubBandwidth = onSnapshot(
-      query(
-        collection(db, `userBandwidth/${user.uid}/data`),
-        orderBy("timestamp", "desc"),
-        limit(20)
-      ),
-      (snapshot) => {
-        const data = snapshot.docs.map(doc => ({
-          ...doc.data(),
-          timestamp: doc.data().timestamp?.toDate?.() || new Date()
-        })).reverse();
-        setUserBandwidthData(data);
-      },
-      (error) => {
-        console.error('Bandwidth listener error:', error);
-        handleFirestoreError(error, 'bandwidth listener');
-      }
-    );
-
-    // Listen to hourly usage data
-    const unsubHourly = onSnapshot(
-      query(
-        collection(db, `userHourlyUsage/${user.uid}/data`),
-        orderBy("timestamp", "desc"),
-        limit(24)
-      ),
-      (snapshot) => {
-        const data = snapshot.docs.map(doc => ({
-          ...doc.data(),
-          timestamp: doc.data().timestamp?.toDate?.() || new Date()
-        })).reverse();
-        
-        // Group by hour and aggregate
-        const hourlyData = data.reduce((acc: any, item: any) => {
-          const hour = new Date(item.hour).getHours();
-          const time = `${hour.toString().padStart(2, '0')}:00`;
-          
-          if (!acc[time]) {
-            acc[time] = { time, download: 0, upload: 0, count: 0 };
-          }
-          acc[time].download += item.usage || 0;
-          acc[time].upload += (item.usage || 0) * 0.3;
-          acc[time].count += 1;
-          return acc;
-        }, {});
-
-        // Convert to array and average the values
-        const hourlyArray = Object.values(hourlyData).map((item: any) => ({
-          ...item,
-          download: item.download / item.count,
-          upload: item.upload / item.count
-        }));
-
-        setHourlyUsageData(hourlyArray);
-      },
-      (error) => {
-        console.error('Hourly usage listener error:', error);
-        handleFirestoreError(error, 'hourly usage listener');
-      }
-    );
-
-    // Listen to daily usage data
-    const unsubDaily = onSnapshot(
-      query(
-        collection(db, `userDailyUsage/${user.uid}/data`),
-        orderBy("timestamp", "desc"),
-        limit(7)
-      ),
-      (snapshot) => {
-        const data = snapshot.docs.map(doc => ({
-          ...doc.data(),
-          timestamp: doc.data().timestamp?.toDate?.() || new Date()
-        })).reverse();
-        
-        // Group by day and aggregate
-        const dailyData = data.reduce((acc: any, item: any) => {
-          const day = new Date(item.day).toLocaleDateString('en-US', { weekday: 'short' });
-          
-          if (!acc[day]) {
-            acc[day] = { day, usage: 0, count: 0 };
-          }
-          acc[day].usage += item.usage || 0;
-          acc[day].count += 1;
-          return acc;
-        }, {});
-
-        // Convert to array and average the values
-        const dailyArray = Object.values(dailyData).map((item: any) => ({
-          ...item,
-          usage: item.usage / item.count
-        }));
-
-        setDailyUsageData(dailyArray);
-      },
-      (error) => {
-        console.error('Daily usage listener error:', error);
-        handleFirestoreError(error, 'daily usage listener');
-      }
-    );
-
-    return () => {
-      stopDataCollection();
-      unsubProfile();
-      unsubStats();
-      unsubAssignedDevices();
-      unsubBandwidth();
-      unsubHourly();
-      unsubDaily();
-    };
-  }, [user.uid, user.role, navigate]);
-
-  // Cleanup on unmount
-  useEffect(() => {
-    return () => {
-      stopDataCollection();
-    };
-  }, []);
-
-  const { currentUsage = 0, usedData = 0, dataLimit = 100 } = userStats as any;
-  const { name = user.email, role = 'user', department = 'General' } = userProfile as any;
-  
-  // Calculate current usage from assigned devices as fallback
-  const deviceUsage = assignedDevices.reduce((sum: number, device: any) => {
-    return sum + (device.usage || 0);
-  }, 0);
-  
-  // Use device usage if userStats currentUsage is not available
-  const displayCurrentUsage = currentUsage > 0 ? currentUsage : deviceUsage;
-
-  const COLORS = ['#0088FE', '#00C49F', '#FFBB28', '#FF8042', '#8884D8'];
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
-      {readOnly && (
-        <div className="bg-yellow-600 text-white text-center py-2 font-semibold">
-          Read-only access: You do not have permission to modify data.
-        </div>
-      )}
       {/* Header */}
       <div className="bg-slate-800/50 border-b border-slate-700">
         <div className="container mx-auto px-4 py-4">
@@ -435,31 +76,19 @@ const UserDashboard = () => {
             <div className="flex items-center gap-3">
               <Monitor className="h-8 w-8 text-cyan-400" />
               <div>
-                <h1 className="text-2xl font-bold text-white">My Usage Dashboard</h1>
+                <h1 className="text-2xl font-bold text-white">Real-Time System Monitor</h1>
                 <div className="flex items-center gap-4 mt-1">
-                  {selectedNetwork && networkInfo && (
-                    <div className="flex items-center gap-2">
-                      <Wifi className="h-4 w-4 text-blue-400" />
-                      <span className="text-sm text-slate-300">
-                        Connected to: <span className="font-medium text-blue-400">{networkInfo.name}</span>
-                        <span className={`ml-2 w-2 h-2 rounded-full inline-block ${
-                          networkInfo.status === 'active' ? 'bg-green-400' : 'bg-yellow-400'
-                        }`}></span>
-                      </span>
-                    </div>
-                  )}
-                  
                   {/* Real Network Data Status */}
                   <div className="flex items-center gap-2">
                     {hasRealData ? (
                       <>
                         <Server className="h-4 w-4 text-green-400" />
-                        <span className="text-sm text-green-400 font-medium">Real Network Data</span>
+                        <span className="text-sm text-green-400 font-medium">Live Data Active</span>
                       </>
                     ) : networkError ? (
                       <>
                         <AlertCircle className="h-4 w-4 text-red-400" />
-                        <span className="text-sm text-red-400">Network Monitor Offline</span>
+                        <span className="text-sm text-red-400">Monitor Offline</span>
                       </>
                     ) : networkLoading ? (
                       <>
@@ -469,10 +98,28 @@ const UserDashboard = () => {
                     ) : (
                       <>
                         <Server className="h-4 w-4 text-gray-400" />
-                        <span className="text-sm text-gray-400">Simulated Data</span>
+                        <span className="text-sm text-gray-400">No Live Data</span>
                       </>
                     )}
                   </div>
+                  
+                  {/* Current Bandwidth Display */}
+                  {hasRealData && currentBandwidth && (
+                    <div className="flex items-center gap-4">
+                      <div className="flex items-center gap-1">
+                        <Download className="h-3 w-3 text-blue-400" />
+                        <span className="text-xs text-blue-400">
+                          {(currentBandwidth.download * 0.45).toFixed(2)} GB/h
+                        </span>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <Upload className="h-3 w-3 text-green-400" />
+                        <span className="text-xs text-green-400">
+                          {(currentBandwidth.upload * 0.45).toFixed(2)} GB/h
+                        </span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
             </div>
@@ -489,108 +136,95 @@ const UserDashboard = () => {
       </div>
 
       <div className="container mx-auto px-4 py-8">
-        {/* User Profile & Assigned Data */}
-        <Card className="bg-slate-800/50 border-slate-700 mb-6">
-          <CardHeader>
-            <CardTitle className="text-white">My Profile & Assigned Data</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <div className="space-y-4">
-                <div>
-                  <p className="text-slate-400 text-sm">Name</p>
-                  <p className="text-white font-medium">{name}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Email</p>
-                  <p className="text-white font-medium">{user.email}</p>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Role</p>
-                  <Badge variant="outline" className="border-slate-600 text-slate-300">
-                    {role}
-                  </Badge>
-                </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Department</p>
-                  <p className="text-white font-medium">{department}</p>
-                </div>
-                {selectedNetwork && networkInfo && (
+        {/* Real-Time System Overview */}
+        {hasRealData && systemInfo && (
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+            {/* Current Bandwidth */}
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-slate-400 text-sm">Connected Network</p>
-                    <div className="flex items-center gap-2">
-                      <Wifi className="h-4 w-4 text-blue-400" />
-                      <span className="text-white font-medium">{networkInfo.name}</span>
-                      <span className={`w-2 h-2 rounded-full ${
-                        networkInfo.status === 'active' ? 'bg-green-400' : 'bg-yellow-400'
-                      }`}></span>
-                    </div>
-                    <p className="text-xs text-slate-400 mt-1">{networkInfo.description}</p>
+                    <p className="text-slate-400 text-sm">Current Bandwidth</p>
+                    <p className="text-2xl font-bold text-white">
+                      {currentBandwidth ? (currentBandwidth.total * 0.45).toFixed(2) : '0.00'} GB/h
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">Real-time network usage</p>
                   </div>
-                )}
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <p className="text-slate-400 text-sm">Assigned Devices</p>
-                  <p className="text-2xl font-bold text-white">{assignedDevices.length}</p>
+                  <Activity className="h-8 w-8 text-cyan-400" />
                 </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Data Limit</p>
-                  <p className="text-2xl font-bold text-white">{dataLimit} GB</p>
+              </CardContent>
+            </Card>
+
+            {/* CPU Usage */}
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-slate-400 text-sm">CPU</p>
+                    <p className="text-lg font-bold text-white">{systemInfo.cpu.brand}</p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {systemInfo.cpu.cores} cores @ {systemInfo.cpu.speed} GHz
+                    </p>
+                  </div>
+                  <Cpu className="h-8 w-8 text-green-400" />
                 </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Current Usage</p>
-                  <p className="text-2xl font-bold text-white">{displayCurrentUsage.toFixed(1)} GB/h</p>
-                  <p className="text-xs text-slate-500">
-                    {currentUsage > 0 ? 'From userStats' : deviceUsage > 0 ? 'From devices' : 'Simulated'}
-                  </p>
+              </CardContent>
+            </Card>
+
+            {/* Memory Usage */}
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-slate-400 text-sm">Memory</p>
+                    <p className="text-2xl font-bold text-white">
+                      {((systemInfo.memory.used / systemInfo.memory.total) * 100).toFixed(1)}%
+                    </p>
+                    <p className="text-xs text-slate-500 mt-1">
+                      {Math.round(systemInfo.memory.used / 1024 / 1024 / 1024)}GB / {Math.round(systemInfo.memory.total / 1024 / 1024 / 1024)}GB
+                    </p>
+                  </div>
+                  <MemoryStick className="h-8 w-8 text-blue-400" />
                 </div>
-              </div>
-              
-              <div className="space-y-4">
-                <div>
-                  <p className="text-slate-400 text-sm">Used This Month</p>
-                  <p className="text-2xl font-bold text-white">{usedData.toFixed(1)} GB</p>
+              </CardContent>
+            </Card>
+
+            {/* Machine Type */}
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardContent className="p-6">
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-slate-400 text-sm">Machine</p>
+                    <p className="text-lg font-bold text-white">{systemInfo.machine.model}</p>
+                    <p className="text-xs text-slate-500 mt-1">{systemInfo.machine.manufacturer}</p>
+                  </div>
+                  <Server className="h-8 w-8 text-purple-400" />
                 </div>
-                <div>
-                  <p className="text-slate-400 text-sm">Remaining Data</p>
-                  <p className="text-2xl font-bold text-white">{(dataLimit - usedData).toFixed(1)} GB</p>
-                </div>
-                <div className="w-full">
-                  <Progress
-                    value={(usedData / dataLimit) * 100}
-                    className="h-3"
-                  />
-                  <p className="text-xs text-slate-500 mt-1">
-                    {((usedData / dataLimit) * 100).toFixed(1)}% used
-                  </p>
-                </div>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </div>
+        )}
 
         {/* Real Network Interfaces */}
         {hasRealData && activeInterfaces.length > 0 && (
-          <Card className="mb-6 bg-slate-800/50 border-slate-700">
+          <Card className="mb-8 bg-slate-800/50 border-slate-700">
             <CardHeader>
               <CardTitle className="text-white flex items-center gap-2">
-                <Server className="h-5 w-5 text-green-400" />
-                Real Network Interfaces
+                <Wifi className="h-5 w-5 text-green-400" />
+                Active Network Interfaces
               </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
                 {activeInterfaces.map((iface, index) => (
-                  <div key={index} className="p-3 bg-slate-700/50 rounded-lg border border-slate-600">
-                    <div className="flex items-center justify-between mb-2">
+                  <div key={index} className="p-4 bg-slate-700/50 rounded-lg border border-slate-600">
+                    <div className="flex items-center justify-between mb-3">
                       <span className="text-sm font-medium text-white">{iface.iface}</span>
                       <Badge variant="outline" className="border-green-500 text-green-400 text-xs">
                         {iface.type}
                       </Badge>
                     </div>
-                    <div className="space-y-1 text-xs">
+                    <div className="space-y-2 text-xs">
                       <div className="flex justify-between">
                         <span className="text-slate-400">IP Address:</span>
                         <span className="text-white font-mono">{iface.ip4}</span>
@@ -613,247 +247,97 @@ const UserDashboard = () => {
           </Card>
         )}
 
-        {/* Real-Time Data Collection Status */}
-        <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${dataCollectionInterval ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              <span className="text-white">
-                Real-time data collection: {dataCollectionInterval ? 'Active' : 'Inactive'}
-              </span>
-            </div>
-            <div className="flex items-center gap-4">
-              <div className="text-sm text-slate-400">
-                {hasRealData ? (
-                  `Real network data: ${currentBandwidth.download.toFixed(2)}↓ ${currentBandwidth.upload.toFixed(2)}↑ Mbps`
-                ) : (
-                  `Syncing with ${assignedDevices.length} assigned devices`
-                )}
-              </div>
-              <Button
-                variant="outline"
-                size="sm"
-                onClick={dataCollectionInterval ? stopDataCollection : startDataCollection}
-                className="border-slate-600 text-slate-300"
-              >
-                {dataCollectionInterval ? 'Stop Collection' : 'Start Collection'}
-              </Button>
-            </div>
-          </div>
-          <div className="mt-2 text-xs text-slate-500">
-            {hasRealData ? (
-              'Current usage from real network monitoring'
-            ) : (
-              `Current usage syncs with: ${assignedDevices.length > 0 ? 'Device usage from Firestore' : 'Simulated data'}`
-            )}
-          </div>
-          <div className="mt-2 text-xs text-slate-400">
-            Debug: userStats={JSON.stringify({ currentUsage, usedData, dataLimit })} | 
-            deviceUsage={deviceUsage.toFixed(2)} | 
-            displayUsage={displayCurrentUsage.toFixed(2)} | 
-            devices={assignedDevices.length}
-          </div>
-        </div>
-
-        {/* Real-Time Bandwidth Graph */}
-        <Card className="bg-slate-800/50 border-slate-700 mb-8">
-          <CardHeader>
-            <CardTitle className="text-white">Real-Time Bandwidth Usage (GB/h)</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <ResponsiveContainer width="100%" height={300}>
-              <LineChart data={userBandwidthData}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                <XAxis
-                  dataKey="timestamp"
-                  stroke="#9CA3AF"
-                  tickFormatter={ts => new Date(ts).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
-                />
-                <YAxis stroke="#9CA3AF" unit=" GB/h" />
-                <Tooltip
-                  labelFormatter={ts => new Date(ts).toLocaleString()}
-                  formatter={value => [`${value} GB/h`, 'Usage']}
-                />
-                <Line
-                  type="monotone"
-                  dataKey="usage"
-                  stroke="#06B6D4"
-                  strokeWidth={2}
-                  dot={false}
-                  name="Usage"
-                />
-              </LineChart>
-            </ResponsiveContainer>
-          </CardContent>
-        </Card>
-
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-          <Card className="bg-slate-800/50 border-slate-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-slate-400 text-sm">Current Usage</p>
-                  <p className="text-2xl font-bold text-white">{displayCurrentUsage.toFixed(1)} GB/h</p>
-                  <p className="text-xs text-slate-500">
-                    {currentUsage > 0 ? 'From userStats' : deviceUsage > 0 ? 'From devices' : 'Simulated'}
-                  </p>
-                </div>
-                <Activity className="h-8 w-8 text-green-400" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-800/50 border-slate-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-slate-400 text-sm">Used This Month</p>
-                  <p className="text-2xl font-bold text-white">{usedData.toFixed(1)} GB</p>
-                </div>
-                <Download className="h-8 w-8 text-blue-400" />
-              </div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-slate-800/50 border-slate-700">
-            <CardContent className="p-6">
-              <div className="flex items-center justify-between">
-                <div>
-                  <p className="text-slate-400 text-sm">Data Limit</p>
-                  <p className="text-2xl font-bold text-white">{dataLimit} GB</p>
-                </div>
-                <TrendingUp className="h-8 w-8 text-yellow-400" />
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Progress Bar */}
-        <Card className="bg-slate-800/50 border-slate-700 mb-8">
-          <CardContent className="p-6">
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-slate-400">Data Usage</span>
-                <span className="text-white">{((usedData / dataLimit) * 100).toFixed(1)}%</span>
-              </div>
-              <Progress value={(usedData / dataLimit) * 100} className="h-3" />
-              <div className="flex justify-between text-xs text-slate-500">
-                <span>{usedData.toFixed(1)} GB used</span>
-                <span>{(dataLimit - usedData).toFixed(1)} GB remaining</span>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Charts Section */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
-          <Card className="bg-slate-800/50 border-slate-700">
+        {/* Real-Time Bandwidth Chart */}
+        {hasRealData && bandwidthHistory.length > 0 && (
+          <Card className="mb-8 bg-slate-800/50 border-slate-700">
             <CardHeader>
-              <CardTitle className="text-white">Today's Usage Pattern (Live Data)</CardTitle>
+              <CardTitle className="text-white">Real-Time Bandwidth Usage</CardTitle>
             </CardHeader>
             <CardContent>
-              {hourlyUsageData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <LineChart data={hourlyUsageData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="time" stroke="#9CA3AF" />
-                    <YAxis stroke="#9CA3AF" />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1F2937',
-                        border: '1px solid #374151',
-                        borderRadius: '8px'
-                      }}
-                    />
-                    <Line type="monotone" dataKey="download" stroke="#3B82F6" strokeWidth={2} name="Download" />
-                    <Line type="monotone" dataKey="upload" stroke="#10B981" strokeWidth={2} name="Upload" />
-                  </LineChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-[300px] flex items-center justify-center text-slate-400">
-                  Collecting live hourly data...
-                </div>
-              )}
+              <ResponsiveContainer width="100%" height={300}>
+                <LineChart data={bandwidthHistory}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
+                  <XAxis 
+                    dataKey="time" 
+                    stroke="#9CA3AF"
+                    tick={{ fontSize: 12 }}
+                  />
+                  <YAxis 
+                    stroke="#9CA3AF"
+                    tick={{ fontSize: 12 }}
+                    label={{ value: 'GB/h', angle: -90, position: 'insideLeft', style: { textAnchor: 'middle', fill: '#9CA3AF' } }}
+                  />
+                  <Tooltip
+                    contentStyle={{
+                      backgroundColor: '#1F2937',
+                      border: '1px solid #374151',
+                      borderRadius: '8px'
+                    }}
+                    formatter={(value: any) => [(value * 0.45).toFixed(2) + ' GB/h', '']}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="download" 
+                    stroke="#3B82F6" 
+                    strokeWidth={2} 
+                    name="Download"
+                    dot={false}
+                  />
+                  <Line 
+                    type="monotone" 
+                    dataKey="upload" 
+                    stroke="#10B981" 
+                    strokeWidth={2} 
+                    name="Upload"
+                    dot={false}
+                  />
+                </LineChart>
+              </ResponsiveContainer>
             </CardContent>
           </Card>
+        )}
 
-          <Card className="bg-slate-800/50 border-slate-700">
-            <CardHeader>
-              <CardTitle className="text-white">Weekly Usage Trend (Live Data)</CardTitle>
-            </CardHeader>
-            <CardContent>
-              {dailyUsageData.length > 0 ? (
-                <ResponsiveContainer width="100%" height={300}>
-                  <BarChart data={dailyUsageData}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                    <XAxis dataKey="day" stroke="#9CA3AF" />
-                    <YAxis stroke="#9CA3AF" />
-                    <Tooltip
-                      contentStyle={{
-                        backgroundColor: '#1F2937',
-                        border: '1px solid #374151',
-                        borderRadius: '8px'
-                      }}
-                    />
-                    <Bar dataKey="usage" fill="#10B981" />
-                  </BarChart>
-                </ResponsiveContainer>
-              ) : (
-                <div className="h-[300px] flex items-center justify-center text-slate-400">
-                  Collecting live daily data...
-                </div>
-              )}
-            </CardContent>
-          </Card>
-        </div>
-
-        {/* Assigned Devices */}
-        <Card className="bg-slate-800/50 border-slate-700">
-          <CardHeader>
-            <CardTitle className="text-white">My Assigned Devices</CardTitle>
-          </CardHeader>
-          <CardContent>
-            {assignedDevices.length > 0 ? (
-              <div className="space-y-4">
-                {assignedDevices.map((device) => (
-                  <div key={device.id} className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
-                    <div className="flex items-center gap-4">
-                      <div className="flex items-center gap-2">
-                        {device.type === 'mobile' && <Smartphone className="h-4 w-4" />}
-                        {device.type === 'laptop' && <Laptop className="h-4 w-4" />}
-                        {device.type === 'desktop' && <Settings className="h-4 w-4" />}
-                        <span className="text-white font-medium">{device.name}</span>
-                      </div>
-                      <Badge
-                        variant={device.status === 'active' ? 'default' : 'secondary'}
-                        className={device.status === 'active' ? 'bg-green-600' : 'bg-gray-600'}
-                      >
-                        {device.status}
-                      </Badge>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-slate-400 text-sm">Usage</p>
-                      <p className="text-white">{device.usage} GB/h</p>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <div className="text-center py-8 text-slate-400">
-                No devices assigned to this user.
-              </div>
-            )}
-          </CardContent>
-        </Card>
-
-        {showSampleData && (
-          <div className="mt-6 p-4 bg-yellow-600/20 border border-yellow-600/50 rounded-lg">
-            <p className="text-yellow-400 text-center">
-              No usage data available. Starting real-time data collection...
-            </p>
+        {/* Machine Information and Email Validation */}
+        {hasRealData && systemInfo && (
+          <div className="mb-8">
+            <MachineInfo systemInfo={systemInfo} validateEmail={validateEmail} />
           </div>
         )}
+
+        {/* No Real Data Message */}
+        {!hasRealData && (
+          <Card className="bg-slate-800/50 border-slate-700">
+            <CardContent className="p-12 text-center">
+              <Server className="h-16 w-16 mx-auto mb-4 text-slate-600" />
+              <h3 className="text-xl font-semibold text-white mb-2">No Real-Time Data Available</h3>
+              <p className="text-slate-400 mb-4">
+                Start the network monitor server to see live system information and network usage.
+              </p>
+              <div className="space-y-2 text-sm text-slate-500">
+                <p>Run: <code className="bg-slate-700 px-2 py-1 rounded">npm run server</code></p>
+                <p>Then refresh this page to see real-time data.</p>
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
+        {/* User Info (Minimal) */}
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardContent className="p-6">
+            <div className="flex items-center justify-between">
+              <div>
+                <p className="text-slate-400 text-sm">Logged in as</p>
+                <p className="text-white font-medium">{user.email || 'Guest'}</p>
+              </div>
+              <div className="text-right">
+                <p className="text-slate-400 text-sm">Status</p>
+                <Badge variant="outline" className="border-green-500 text-green-400">
+                  {hasRealData ? 'Live Monitoring' : 'Offline'}
+                </Badge>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );
