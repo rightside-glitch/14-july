@@ -425,6 +425,21 @@ const AdminDashboard = () => {
     };
   }, []);
 
+  const [manageUserDialogOpen, setManageUserDialogOpen] = useState(false);
+  const [userToManage, setUserToManage] = useState(null);
+
+  // Dismiss user from Firestore
+  const handleDismissUser = async () => {
+    if (!userToManage) return;
+    try {
+      await deleteDoc(doc(db, "users", userToManage.id));
+      setManageUserDialogOpen(false);
+      setUserToManage(null);
+    } catch (error) {
+      handleFirestoreError(error, 'dismiss user');
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       {readOnly && (
@@ -680,8 +695,7 @@ const AdminDashboard = () => {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => fetchRealUserBandwidth([{ data: () => user }])}
-                            disabled={networkLoading}
+                            onClick={() => { setUserToManage(user); setManageUserDialogOpen(true); }}
                             className="border-slate-600 text-slate-300 hover:bg-slate-700"
                           >
                             Manage
@@ -712,6 +726,26 @@ const AdminDashboard = () => {
                     </div>
                   );
                 })}
+                {/* Dismiss User Dialog */}
+                <Dialog open={manageUserDialogOpen} onOpenChange={setManageUserDialogOpen}>
+                  <DialogContent>
+                    <DialogHeader>
+                      <DialogTitle>Manage User</DialogTitle>
+                    </DialogHeader>
+                    <div className="py-4">
+                      <p>Are you sure you want to dismiss this user?</p>
+                      <p className="mt-2 font-bold text-red-500">{userToManage?.email}</p>
+                    </div>
+                    <DialogFooter>
+                      <Button variant="outline" onClick={() => setManageUserDialogOpen(false)}>
+                        Cancel
+                      </Button>
+                      <Button variant="destructive" onClick={handleDismissUser}>
+                        Dismiss User
+                      </Button>
+                    </DialogFooter>
+                  </DialogContent>
+                </Dialog>
               </div>
             )}
           </CardContent>
