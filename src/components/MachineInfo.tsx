@@ -18,14 +18,89 @@ import {
   Info
 } from 'lucide-react';
 
+interface SystemDisk {
+  device: string;
+  type: string;
+  name: string;
+  size: number;
+  serial: string;
+}
+
+interface SystemInfo {
+  machine: {
+    manufacturer: string;
+    model: string;
+    version: string;
+    serial: string;
+    uuid: string;
+    sku: string;
+    virtual: boolean;
+  };
+  cpu: {
+    manufacturer: string;
+    brand: string;
+    cores: number;
+    physicalCores: number;
+    speed: number;
+    cache: Record<string, unknown>;
+  };
+  memory: {
+    total: number;
+    used: number;
+    free: number;
+    active: number;
+    available: number;
+  };
+  os: {
+    platform: string;
+    distro: string;
+    release: string;
+    arch: string;
+    hostname: string;
+    codename: string;
+    kernel: string;
+    build: string;
+  };
+  storage: {
+    disks: SystemDisk[];
+  };
+  graphics: {
+    controllers: Array<{
+      model: string;
+      vendor: string;
+      vram: number;
+      driverVersion: string;
+    }>;
+  };
+}
+
+interface EmailValidationResult {
+  email: string;
+  isValid: boolean;
+  type: 'real' | 'fake';
+  confidence: 'high' | 'low';
+  reasons: {
+    isFake: boolean;
+    isDisposable: boolean;
+    realScore: number;
+    indicators: {
+      hasValidFormat: boolean;
+      hasValidDomain: boolean;
+      hasReasonableLength: boolean;
+      notTestEmail: boolean;
+      notDisposable: boolean;
+    };
+  };
+}
+
 interface MachineInfoProps {
-  systemInfo: any;
-  validateEmail: (email: string) => Promise<any>;
+  systemInfo: SystemInfo;
+  validateEmail: (email: string) => Promise<EmailValidationResult | null>;
 }
 
 export const MachineInfo = ({ systemInfo, validateEmail }: MachineInfoProps) => {
   const [email, setEmail] = useState('');
-  const [validationResult, setValidationResult] = useState<any>(null);
+  const [validationResult, setValidationResult] = useState<EmailValidationResult | null>(null);
   const [isValidating, setIsValidating] = useState(false);
 
   const handleEmailValidation = async () => {
@@ -196,7 +271,7 @@ export const MachineInfo = ({ systemInfo, validateEmail }: MachineInfoProps) => 
                   <Label className="text-slate-400 text-sm">Storage</Label>
                 </div>
                 <div className="space-y-2">
-                  {systemInfo.storage.disks.slice(0, 2).map((disk: any, index: number) => (
+                  {systemInfo.storage.disks.slice(0, 2).map((disk: SystemDisk, index: number) => (
                     <div key={index}>
                       <p className="text-white font-medium">{disk.name}</p>
                       <p className="text-slate-400 text-sm">{formatBytes(disk.size)}</p>

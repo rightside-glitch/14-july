@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -87,7 +87,7 @@ const AdminDashboard = () => {
   const readOnly = user.role !== 'admin';
 
   // Fetch real user bandwidth data
-  const fetchRealUserBandwidth = async (users) => {
+  const fetchRealUserBandwidth = useCallback(async (users) => {
     try {
       const userBandwidthData = {};
       let totalRealBandwidth = 0;
@@ -114,7 +114,7 @@ const AdminDashboard = () => {
     } catch (error) {
       console.error('Error fetching real user bandwidth:', error);
     }
-  };
+  }, [getUserBandwidth]);
 
   // Listen to Firestore devices collection
   useEffect(() => {
@@ -193,7 +193,7 @@ const AdminDashboard = () => {
       }
     );
     return () => unsub();
-  }, [getUserBandwidth]);
+  }, [fetchRealUserBandwidth, lastUserCount, getUserBandwidth]);
 
   // Listen to userStats collection to sync with actual user data (only users with 'user' role)
   useEffect(() => {
@@ -205,15 +205,15 @@ const AdminDashboard = () => {
         const stats = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
         
         // Filter to only include users with 'user' role
-        const userStatsFiltered = stats.filter((stat: any) => stat.role === 'user' || !stat.role);
+        const userStatsFiltered = stats.filter((stat: { role?: string }) => stat.role === 'user' || !stat.role);
         setUserStats(userStatsFiltered);
         
         // Calculate total usage from actual user data (only users with 'user' role)
-        const totalUsage = userStatsFiltered.reduce((sum, stat: any) => sum + (stat.currentUsage || 0), 0);
+        const totalUsage = userStatsFiltered.reduce((sum, stat: { currentUsage?: number }) => sum + (stat.currentUsage || 0), 0);
         setTotalBandwidthUsage(totalUsage);
         
         console.log(`Total bandwidth usage from ${userStatsFiltered.length} users: ${totalUsage.toFixed(2)} GB/h`);
-        console.log('User stats for calculation:', userStatsFiltered.map((stat: any) => ({ email: stat.userEmail, usage: stat.currentUsage })));
+        console.log('User stats for calculation:', userStatsFiltered.map((stat: { userEmail?: string; currentUsage?: number }) => ({ email: stat.userEmail, usage: stat.currentUsage })));
       },
       (error) => {
         console.error('UserStats listener error:', error);
@@ -310,7 +310,7 @@ const AdminDashboard = () => {
   ];
 
   // Filter devices to only show those assigned to users with 'user' role
-  const userEmails = userStats.map((stat: any) => stat.userEmail).filter(Boolean);
+      const userEmails = userStats.map((stat: { userEmail?: string }) => stat.userEmail).filter(Boolean);
   const displayDevices = devices.filter(device => userEmails.includes(device.user));
 
   // Calculate total bandwidth safely
@@ -333,7 +333,7 @@ const AdminDashboard = () => {
   const dataCollectionRef = useRef<NodeJS.Timeout | undefined>();
 
   // Start real-time data collection for admin dashboard using real network data
-  const startAdminDataCollection = async () => {
+  const startAdminDataCollection = useCallback(async () => {
     if (dataCollectionRef.current) return;
     
     dataCollectionRef.current = setInterval(async () => {
@@ -361,7 +361,7 @@ const AdminDashboard = () => {
         console.error('Error collecting admin real-time data:', error);
       }
     }, 5000); // Collect data every 5 seconds
-  };
+  }, [hasRealData, currentBandwidth, bandwidthGBh]);
 
   // Stop admin data collection
   const stopAdminDataCollection = () => {
@@ -423,7 +423,7 @@ const AdminDashboard = () => {
     return () => {
       stopAdminDataCollection();
     };
-  }, []);
+  }, [startAdminDataCollection]);
 
   const [manageUserDialogOpen, setManageUserDialogOpen] = useState(false);
   const [userToManage, setUserToManage] = useState(null);

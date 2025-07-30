@@ -20,7 +20,12 @@ export const googleProvider = new GoogleAuthProvider();
 export const db = getFirestore(app);
 
 // Add error handling for Firestore operations
-export const handleFirestoreError = (error: any, operation: string) => {
+interface FirebaseError {
+  code?: string;
+  message?: string;
+}
+
+export const handleFirestoreError = (error: FirebaseError | Error, operation: string) => {
   console.error(`Firestore ${operation} error:`, error);
   
   // Check for common Firebase errors
