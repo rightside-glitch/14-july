@@ -144,6 +144,52 @@ const UserDashboard = () => {
       </div>
 
       <div className="container mx-auto px-4 py-8">
+        {/* Real-Time Network Interfaces */}
+        {hasRealData && activeInterfaces && (
+          <div className="mb-8">
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader className="text-center pb-4">
+                <div className="flex justify-center mb-4">
+                  <div className="p-3 bg-blue-500/20 rounded-full">
+                    <Wifi className="h-8 w-8 text-blue-400" />
+                  </div>
+                </div>
+                <CardTitle className="text-2xl text-white">Connected Network Interfaces</CardTitle>
+                <p className="text-slate-300 text-sm">
+                  All currently active network interfaces on this machine
+                </p>
+              </CardHeader>
+              <CardContent>
+                {activeInterfaces.length === 0 ? (
+                  <div className="p-4 text-center text-slate-400">No active network interfaces found</div>
+                ) : (
+                  <div className="space-y-3">
+                    {activeInterfaces.map((iface, idx) => (
+                      <div key={iface.iface + idx} className="p-3 bg-slate-700/40 rounded-lg flex flex-col md:flex-row md:items-center md:justify-between gap-2 border border-slate-600">
+                        <div className="flex items-center gap-3">
+                          <Wifi className="h-5 w-5 text-blue-400" />
+                          <span className="font-medium text-white">{iface.iface}</span>
+                          <span className="text-xs text-slate-400">{iface.type}</span>
+                          {iface.ssid && <span className="text-xs text-cyan-400">SSID: {iface.ssid}</span>}
+                          {iface.signalStrength && <span className="text-xs text-green-400">Signal: {iface.signalStrength}</span>}
+                          <span className="text-xs text-slate-400">IP: {iface.ip4}</span>
+                          <span className={`ml-2 w-2 h-2 rounded-full ${iface.operstate === 'up' ? 'bg-green-400' : 'bg-yellow-400'}`}></span>
+                        </div>
+                        <div className="flex gap-2 text-xs text-slate-400">
+                          {iface.connectionType && <span>{iface.connectionType}</span>}
+                          {iface.maxBandwidth && <span>Max: {iface.maxBandwidth}</span>}
+                          <span>MAC: {iface.mac}</span>
+                          <span>Speed: {iface.speed} Mbps</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+          </div>
+        )}
+
         {/* Real-Time System Overview */}
         {hasRealData && systemInfo && (
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
