@@ -281,7 +281,7 @@ const UserDashboard = () => {
                       border: '1px solid #374151',
                       borderRadius: '8px'
                     }}
-                    formatter={(value: any) => [(value * 0.45).toFixed(2) + ' GB/h', '']}
+                    formatter={(value: number) => [(value * 0.45).toFixed(2) + ' GB/h', '']}
                   />
                   <Line 
                     type="monotone" 

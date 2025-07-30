@@ -1,4 +1,11 @@
 import { useState, useEffect } from 'react';
+
+// Type for Firebase Timestamp
+interface FirebaseTimestamp {
+  seconds: number;
+  nanoseconds: number;
+  toDate(): Date;
+}
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -30,8 +37,8 @@ interface Visitor {
   deviceId: string;
   ipAddress: string;
   macAddress: string;
-  connectedAt: any;
-  lastSeen: any;
+  connectedAt: Date | FirebaseTimestamp | null;
+  lastSeen: Date | FirebaseTimestamp | null;
   status: 'active' | 'inactive' | 'blocked';
   bandwidthUsed: number;
   timeLimit: number;
@@ -47,13 +54,18 @@ interface VisitorDevice {
   usage: number;
   status: string;
   networkId: string;
-  lastSeen: any;
+  lastSeen: Date | FirebaseTimestamp | null;
 }
 
 export const VisitorsNetworkManager = () => {
   const [visitors, setVisitors] = useState<Visitor[]>([]);
   const [visitorDevices, setVisitorDevices] = useState<VisitorDevice[]>([]);
-  const [networkStats, setNetworkStats] = useState<any>(null);
+  const [networkStats, setNetworkStats] = useState<{
+    totalDevices: number;
+    activeDevices: number;
+    totalBandwidth: number;
+    peakUsage: number;
+  } | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [selectedVisitor, setSelectedVisitor] = useState<Visitor | null>(null);
 

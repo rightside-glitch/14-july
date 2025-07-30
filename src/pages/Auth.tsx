@@ -17,6 +17,12 @@ import {
 } from "firebase/auth";
 import { setDoc, doc, getDoc } from "firebase/firestore";
 
+// Type for Firebase/Auth errors
+interface AuthError {
+  code?: string;
+  message?: string;
+}
+
 export default function Auth() {
   const [isLoading, setIsLoading] = useState(false);
   const [phoneNumber, setPhoneNumber] = useState("");
@@ -73,7 +79,7 @@ export default function Auth() {
       }));
       // Redirect to dashboard
       navigate("/dashboard");
-    } catch (error: any) {
+    } catch (error: AuthError | Error) {
       toast({
         title: "Error",
         description: "Failed to sign in with Google. Please try again.",
@@ -109,7 +115,7 @@ export default function Auth() {
         title: "Verification Code Sent",
         description: "Please check your phone for the verification code.",
       });
-    } catch (error: any) {
+    } catch (error: AuthError | Error) {
       console.error('Phone auth error:', error);
       let errorMessage = "Failed to send verification code. Please try again.";
       
@@ -171,7 +177,7 @@ export default function Auth() {
       }));
       // Redirect to dashboard
       navigate("/dashboard");
-    } catch (error: any) {
+    } catch (error: AuthError | Error) {
       console.error('Verification error:', error);
       let errorMessage = "Invalid verification code. Please try again.";
       
@@ -244,7 +250,7 @@ export default function Auth() {
         navigate('/dashboard');
         window.location.reload();
       }
-    } catch (error: any) {
+    } catch (error: AuthError | Error) {
       let errorMessage = "Failed to login. Please try again.";
       
       if (error.code === 'auth/user-not-found' || error.code === 'auth/wrong-password') {
@@ -338,7 +344,7 @@ export default function Auth() {
         navigate('/dashboard');
         window.location.reload();
       }
-    } catch (error: any) {
+    } catch (error: AuthError | Error) {
       let errorMessage = "Failed to create account. Please try again.";
       
       if (error.code === 'auth/email-already-in-use') {

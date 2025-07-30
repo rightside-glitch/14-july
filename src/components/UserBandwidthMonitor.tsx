@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -86,7 +86,7 @@ export const UserBandwidthMonitor = ({ userEmail, getUserBandwidth }: UserBandwi
     time: string;
   }>>([]);
 
-  const fetchUserBandwidth = async () => {
+  const fetchUserBandwidth = useCallback(async () => {
     if (!userEmail) return;
     
     setIsLoading(true);
@@ -117,7 +117,7 @@ export const UserBandwidthMonitor = ({ userEmail, getUserBandwidth }: UserBandwi
     } finally {
       setIsLoading(false);
     }
-  };
+  }, [userEmail, getUserBandwidth]);
 
   useEffect(() => {
     fetchUserBandwidth();
@@ -126,7 +126,7 @@ export const UserBandwidthMonitor = ({ userEmail, getUserBandwidth }: UserBandwi
     const interval = setInterval(fetchUserBandwidth, 5000);
     
     return () => clearInterval(interval);
-  }, [userEmail]);
+  }, [fetchUserBandwidth]);
 
   const formatBytes = (bytes: number) => {
     if (bytes === 0) return '0 Bytes';

@@ -90,7 +90,7 @@ interface SystemInfo {
     cores: number;
     physicalCores: number;
     speed: number;
-    cache: any;
+    cache: Record<string, unknown>;
   };
   memory: {
     total: number;
@@ -462,7 +462,7 @@ export const useRealNetwork = () => {
         clearInterval(intervalId);
       }
     };
-  }, [checkServerHealth, fetchNetworkStatus, fetchSystemInfo]);
+  }, [checkServerHealth, fetchNetworkStatus, fetchSystemInfo, fetchCurrentWiFi, fetchAvailableWiFi, fetchEthernetNetworks, fetchNetworkOverview]);
 
   // Get current bandwidth in a format compatible with the existing app
   const getCurrentBandwidth = useCallback(() => {
