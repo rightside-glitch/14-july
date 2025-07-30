@@ -109,6 +109,56 @@ interface EmailValidationResult {
   };
 }
 
+interface UserBandwidthData {
+  user: {
+    email: string;
+    machine: {
+      hostname: string;
+      platform: string;
+      release: string;
+      arch: string;
+    };
+  };
+  bandwidth: {
+    current: {
+      download: number;
+      upload: number;
+      total: number;
+    };
+    total: {
+      received: number;
+      sent: number;
+      usageGB: number;
+    };
+  };
+  network: {
+    interfaces: Array<{
+      name: string;
+      type: string;
+      ip4: string;
+      mac: string;
+      speed: number;
+      duplex: string;
+      operstate: string;
+    }>;
+  };
+  system: {
+    cpu: {
+      model: string;
+      cores: number;
+      speed: number;
+      load: number;
+    };
+    memory: {
+      total: number;
+      used: number;
+      free: number;
+      available: number;
+    };
+  };
+  timestamp: number;
+}
+
 interface NetworkStatus {
   interfaces: NetworkInterface[];
   stats: NetworkStats;
@@ -120,6 +170,7 @@ const API_BASE_URL = 'http://localhost:3001/api';
 export const useRealNetwork = () => {
   const [networkStatus, setNetworkStatus] = useState<NetworkStatus | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
+  const [userBandwidth, setUserBandwidth] = useState<UserBandwidthData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -225,6 +276,29 @@ export const useRealNetwork = () => {
     }
   }, []);
 
+  // Get user's current machine bandwidth
+  const getUserBandwidth = useCallback(async (userEmail: string): Promise<UserBandwidthData | null> => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/user/bandwidth?userEmail=${encodeURIComponent(userEmail)}`);
+      
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        setUserBandwidth(data.data);
+        return data.data;
+      } else {
+        throw new Error(data.error || 'Failed to get user bandwidth');
+      }
+    } catch (err) {
+      console.error('Error getting user bandwidth:', err);
+      return null;
+    }
+  }, []);
+
   // Initialize and start monitoring
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -323,6 +397,7 @@ export const useRealNetwork = () => {
     // Data
     networkStatus,
     systemInfo,
+    userBandwidth,
     isLoading,
     error,
     isConnected,
@@ -338,6 +413,7 @@ export const useRealNetwork = () => {
     fetchSystemInfo,
     fetchBandwidth,
     validateEmail,
+    getUserBandwidth,
     checkServerHealth,
     
     // Utilities

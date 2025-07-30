@@ -13,7 +13,8 @@ import {
   Shield,
   Home,
   Smartphone,
-  Laptop
+  Laptop,
+  RefreshCw
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -25,6 +26,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
+import { VisitorsNetworkManager } from "@/components/VisitorsNetworkManager";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { useRealNetwork } from "@/hooks/use-real-network";
 
 const AdminDashboard = () => {
   const navigate = useNavigate();
@@ -43,7 +47,27 @@ const AdminDashboard = () => {
     usage: 0
   });
   const [isAddingDevice, setIsAddingDevice] = useState(false);
+  const [activeTab, setActiveTab] = useState('overview');
+  const [realUsers, setRealUsers] = useState([]);
+  const [realUserBandwidth, setRealUserBandwidth] = useState({});
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
+  
+  // Real network data hook
+  const {
+    networkStatus,
+    systemInfo,
+    userBandwidth,
+    isLoading: networkLoading,
+    error: networkError,
+    isConnected,
+    currentBandwidth,
+    bandwidthHistory,
+    activeInterfaces,
+    bandwidthGBh,
+    hasRealData,
+    validateEmail,
+    getUserBandwidth
+  } = useRealNetwork();
   
   // Role-based access control
   useEffect(() => {
@@ -60,6 +84,34 @@ const AdminDashboard = () => {
   }, [user.uid, user.role, navigate]);
   
   const readOnly = user.role !== 'admin';
+
+  // Fetch real user bandwidth data
+  const fetchRealUserBandwidth = async (users) => {
+    try {
+      const userBandwidthData = {};
+      let totalRealBandwidth = 0;
+      
+      for (const userDoc of users) {
+        const userData = userDoc.data();
+        if (userData.email) {
+          try {
+            const bandwidthData = await getUserBandwidth(userData.email);
+            if (bandwidthData) {
+              userBandwidthData[userData.email] = bandwidthData;
+              totalRealBandwidth += bandwidthData.bandwidth.current.total;
+            }
+          } catch (error) {
+            console.error(`Error fetching bandwidth for ${userData.email}:`, error);
+          }
+        }
+      }
+      
+      setRealUserBandwidth(userBandwidthData);
+      setTotalBandwidthUsage(totalRealBandwidth);
+    } catch (error) {
+      console.error('Error fetching real user bandwidth:', error);
+    }
+  };
 
   // Listen to Firestore devices collection
   useEffect(() => {
@@ -78,7 +130,7 @@ const AdminDashboard = () => {
     return () => unsub();
   }, []);
 
-  // Listen to Firestore users collection for user count (only users with 'user' role)
+  // Listen to Firestore users collection for user count and fetch real user data
   useEffect(() => {
     console.log('Setting up users listener...');
     // Initial fetch in case onSnapshot doesn't fire if collection is empty
@@ -86,6 +138,10 @@ const AdminDashboard = () => {
       .then(snapshot => {
         const regularUsers = snapshot.docs.filter(doc => doc.data().role === 'user');
         setUserCount(regularUsers.length);
+        setRealUsers(regularUsers.map(doc => ({ id: doc.id, ...doc.data() })));
+        
+        // Fetch bandwidth data for each real user
+        fetchRealUserBandwidth(regularUsers);
       })
       .catch(error => {
         handleFirestoreError(error, 'initial users fetch');
@@ -96,13 +152,17 @@ const AdminDashboard = () => {
       (snapshot) => {
         const regularUsers = snapshot.docs.filter(doc => doc.data().role === 'user');
         setUserCount(regularUsers.length);
+        setRealUsers(regularUsers.map(doc => ({ id: doc.id, ...doc.data() })));
+        
+        // Fetch bandwidth data for each real user
+        fetchRealUserBandwidth(regularUsers);
       },
       (error) => {
         handleFirestoreError(error, 'users listener');
       }
     );
     return () => unsub();
-  }, []);
+  }, [getUserBandwidth]);
 
   // Listen to userStats collection to sync with actual user data (only users with 'user' role)
   useEffect(() => {
@@ -398,23 +458,38 @@ const AdminDashboard = () => {
       </div>
 
       <div className="container mx-auto px-4 py-8">
-        {/* Real-Time Data Collection Status */}
-        <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center gap-2">
-              <div className={`w-3 h-3 rounded-full ${dataCollectionRef.current ? 'bg-green-500' : 'bg-red-500'}`}></div>
-              <span className="text-white">
-                Real-time data collection: {dataCollectionRef.current ? 'Active' : 'Inactive'}
-              </span>
-            </div>
-            <div className="text-sm text-slate-400">
-              Collecting data every 5 seconds from {devices.length} devices
-            </div>
-          </div>
-        </div>
+        {/* Tabs Navigation */}
+        <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
+          <TabsList className="grid w-full grid-cols-3 bg-slate-800/50 border-slate-700">
+            <TabsTrigger value="overview" className="text-slate-300 data-[state=active]:bg-slate-700 data-[state=active]:text-white">
+              Overview
+            </TabsTrigger>
+            <TabsTrigger value="visitors" className="text-slate-300 data-[state=active]:bg-slate-700 data-[state=active]:text-white">
+              Visitors Net
+            </TabsTrigger>
+            <TabsTrigger value="devices" className="text-slate-300 data-[state=active]:bg-slate-700 data-[state=active]:text-white">
+              Devices
+            </TabsTrigger>
+          </TabsList>
 
-        {/* Stats Cards */}
-        <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+          <TabsContent value="overview" className="space-y-6">
+            {/* Real-Time Data Collection Status */}
+            <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <div className={`w-3 h-3 rounded-full ${dataCollectionRef.current ? 'bg-green-500' : 'bg-red-500'}`}></div>
+                  <span className="text-white">
+                    Real-time data collection: {dataCollectionRef.current ? 'Active' : 'Inactive'}
+                  </span>
+                </div>
+                <div className="text-sm text-slate-400">
+                  Collecting data every 5 seconds from {devices.length} devices
+                </div>
+              </div>
+            </div>
+
+            {/* Stats Cards */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
           <Card className="bg-slate-800/50 border-slate-700">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
@@ -434,9 +509,9 @@ const AdminDashboard = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-400 text-sm">Total Usage (from Users)</p>
-                  <p className="text-2xl font-bold text-white">{totalBandwidthUsage.toFixed(1)} GB/h</p>
-                  <p className="text-xs text-slate-500">From {userStats.length} users</p>
+                  <p className="text-slate-400 text-sm">Real User Bandwidth</p>
+                  <p className="text-2xl font-bold text-white">{totalBandwidthUsage.toFixed(2)} Mbps</p>
+                  <p className="text-xs text-slate-500">From {realUsers.length} real users</p>
                 </div>
                 <TrendingUp className="h-8 w-8 text-green-400" />
               </div>
@@ -447,9 +522,9 @@ const AdminDashboard = () => {
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-400 text-sm">Total Bandwidth Usage</p>
-                  <p className="text-2xl font-bold text-white">{totalBandwidthUsage.toFixed(1)} GB/h</p>
-                  <p className="text-xs text-slate-500">100 GB capacity</p>
+                  <p className="text-slate-400 text-sm">System Bandwidth</p>
+                  <p className="text-2xl font-bold text-white">{hasRealData ? currentBandwidth.total.toFixed(2) : '0.00'} Mbps</p>
+                  <p className="text-xs text-slate-500">Current system total</p>
                 </div>
                 <Shield className="h-8 w-8 text-yellow-400" />
               </div>
@@ -468,6 +543,125 @@ const AdminDashboard = () => {
             </CardContent>
           </Card>
         </div>
+
+        {/* Real User Bandwidth Data */}
+        <Card className="bg-slate-800/50 border-slate-700">
+          <CardHeader>
+            <CardTitle className="text-white flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <Activity className="h-5 w-5 text-green-400" />
+                Real User Bandwidth Monitoring
+              </div>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => fetchRealUserBandwidth(realUsers.map(u => ({ data: () => u })))}
+                disabled={networkLoading}
+                className="border-slate-600 text-slate-300 hover:bg-slate-700"
+              >
+                <RefreshCw className={`h-4 w-4 mr-2 ${networkLoading ? 'animate-spin' : ''}`} />
+                Refresh All Users
+              </Button>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            {realUsers.length === 0 ? (
+              <div className="text-center py-8 text-slate-400">
+                <Users className="h-12 w-12 mx-auto mb-4 text-slate-600" />
+                <p>No real users found</p>
+              </div>
+            ) : (
+              <div className="space-y-4">
+                {realUsers.map((user) => {
+                  const userData = realUserBandwidth[user.email];
+                  return (
+                    <div key={user.id} className="p-4 bg-slate-700/30 rounded-lg border border-slate-600">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center gap-4">
+                          <div>
+                            <h3 className="font-medium text-white">{user.email}</h3>
+                            <p className="text-sm text-slate-400">User ID: {user.id}</p>
+                          </div>
+                          
+                          {userData && (
+                            <div className="flex items-center gap-4">
+                              <div className="text-center">
+                                <div className="text-lg font-bold text-green-400">
+                                  {userData.bandwidth.current.total.toFixed(2)} Mbps
+                                </div>
+                                <div className="text-xs text-slate-400">Current Total</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-lg font-bold text-blue-400">
+                                  {userData.bandwidth.current.download.toFixed(2)} Mbps
+                                </div>
+                                <div className="text-xs text-slate-400">Download</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-lg font-bold text-purple-400">
+                                  {userData.bandwidth.current.upload.toFixed(2)} Mbps
+                                </div>
+                                <div className="text-xs text-slate-400">Upload</div>
+                              </div>
+                              <div className="text-center">
+                                <div className="text-lg font-bold text-yellow-400">
+                                  {userData.bandwidth.total.usageGB.toFixed(2)} GB
+                                </div>
+                                <div className="text-xs text-slate-400">Total Usage</div>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                        
+                        <div className="flex items-center gap-2">
+                          {userData ? (
+                            <Badge variant="outline" className="border-green-500 text-green-400">
+                              Active
+                            </Badge>
+                          ) : (
+                            <Badge variant="outline" className="border-gray-500 text-gray-400">
+                              No Data
+                            </Badge>
+                          )}
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => fetchRealUserBandwidth([{ data: () => user }])}
+                            disabled={networkLoading}
+                            className="border-slate-600 text-slate-300 hover:bg-slate-700"
+                          >
+                            Refresh
+                          </Button>
+                        </div>
+                      </div>
+                      
+                      {userData && (
+                        <div className="mt-4 grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <div className="p-3 bg-slate-700/20 rounded-lg">
+                            <h4 className="font-medium text-white mb-2">Machine Info</h4>
+                            <div className="text-sm text-slate-300 space-y-1">
+                              <div>Hostname: {userData.user.machine.hostname}</div>
+                              <div>Platform: {userData.user.machine.platform}</div>
+                              <div>Architecture: {userData.user.machine.arch}</div>
+                            </div>
+                          </div>
+                          <div className="p-3 bg-slate-700/20 rounded-lg">
+                            <h4 className="font-medium text-white mb-2">System Resources</h4>
+                            <div className="text-sm text-slate-300 space-y-1">
+                              <div>CPU: {userData.system.cpu.model}</div>
+                              <div>CPU Load: {(userData.system.cpu.load * 100).toFixed(1)}%</div>
+                              <div>Memory: {((userData.system.memory.used / userData.system.memory.total) * 100).toFixed(1)}% used</div>
+                            </div>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </CardContent>
+        </Card>
 
         {/* Charts Section */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-8">
@@ -599,177 +793,171 @@ const AdminDashboard = () => {
           </CardContent>
         </Card>
 
-        {/* Device Management */}
-        <Card className="bg-slate-800/50 border-slate-700">
-          <CardHeader>
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-white">Device Management (Active)</CardTitle>
-              {!readOnly && (
-                <Dialog open={showAddDevice} onOpenChange={setShowAddDevice}>
-                  <DialogTrigger asChild>
-                    <Button className="bg-green-600 hover:bg-green-700">
-                      <Activity className="h-4 w-4 mr-2" />
-                      Add Device
-                    </Button>
-                  </DialogTrigger>
-                  <DialogContent className="bg-slate-800 border-slate-700">
-                    <DialogHeader>
-                      <DialogTitle className="text-white">Add New Device</DialogTitle>
-                    </DialogHeader>
-                    <div className="space-y-4">
-                      <div>
-                        <Label htmlFor="deviceName" className="text-slate-300">Device Name</Label>
-                        <Input
-                          id="deviceName"
-                          value={newDevice.name}
-                          onChange={(e) => setNewDevice({...newDevice, name: e.target.value})}
-                          placeholder="e.g., John's Laptop"
-                          className="bg-slate-700 border-slate-600 text-white"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="deviceType" className="text-slate-300">Device Type</Label>
-                        <Select value={newDevice.type} onValueChange={(value) => setNewDevice({...newDevice, type: value})}>
-                          <SelectTrigger className="bg-slate-700 border-slate-600 text-white">
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent className="bg-slate-700 border-slate-600">
-                            <SelectItem value="desktop">Desktop</SelectItem>
-                            <SelectItem value="laptop">Laptop</SelectItem>
-                            <SelectItem value="mobile">Mobile</SelectItem>
-                            <SelectItem value="tv">TV</SelectItem>
-                            <SelectItem value="gaming">Gaming</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </div>
-                      <div>
-                        <Label htmlFor="deviceUser" className="text-slate-300">User Email</Label>
-                        <Input
-                          id="deviceUser"
-                          type="email"
-                          value={newDevice.user}
-                          onChange={(e) => setNewDevice({...newDevice, user: e.target.value})}
-                          placeholder="user@example.com"
-                          className="bg-slate-700 border-slate-600 text-white"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="deviceIP" className="text-slate-300">IP Address</Label>
-                        <Input
-                          id="deviceIP"
-                          value={newDevice.ip}
-                          onChange={(e) => setNewDevice({...newDevice, ip: e.target.value})}
-                          placeholder="192.168.1.100"
-                          className="bg-slate-700 border-slate-600 text-white"
-                        />
-                      </div>
-                      <div>
-                        <Label htmlFor="deviceUsage" className="text-slate-300">Initial Usage (GB/h)</Label>
-                        <Input
-                          id="deviceUsage"
-                          type="number"
-                          step="0.1"
-                          value={newDevice.usage}
-                          onChange={(e) => setNewDevice({...newDevice, usage: parseFloat(e.target.value) || 0})}
-                          placeholder="0.0"
-                          className="bg-slate-700 border-slate-600 text-white"
-                        />
-                      </div>
-                    </div>
-                    <DialogFooter>
-                      <Button variant="outline" onClick={() => setShowAddDevice(false)} className="border-slate-600 text-slate-300">
-                        Cancel
-                      </Button>
-                      <Button 
-                        onClick={handleAddDevice} 
-                        disabled={isAddingDevice}
-                        className="bg-green-600 hover:bg-green-700"
-                      >
-                        {isAddingDevice ? 'Adding...' : 'Add Device'}
-                      </Button>
-                    </DialogFooter>
-                  </DialogContent>
-                </Dialog>
-              )}
-            </div>
-          </CardHeader>
-          <CardContent>
-            <div className="space-y-4">
-              {devices.map((device) => (
-                <div key={device.id} className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
-                  <div className="flex items-center gap-4">
-                    <div className="flex items-center gap-2">
-                      {getDeviceIcon(device.type)}
-                      <span className="text-white font-medium">{device.name}</span>
-                    </div>
-                    <Badge
-                      variant={device.status === 'active' ? 'default' : 'secondary'}
-                      className={device.status === 'active' ? 'bg-green-600' : 'bg-gray-600'}
-                    >
-                      {device.status}
-                    </Badge>
+
+
+          <TabsContent value="visitors" className="space-y-6">
+            <VisitorsNetworkManager />
+          </TabsContent>
+
+          <TabsContent value="devices" className="space-y-6">
+            {/* Devices Management */}
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <Router className="h-5 w-5 text-blue-400" />
+                    Device Management
                   </div>
-                  <div className="flex items-center gap-6">
-                    <div className="text-right">
-                      <p className="text-slate-400 text-sm">User</p>
-                      <p className="text-white">{device.user}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-slate-400 text-sm">IP Address</p>
-                      <p className="text-white">{device.ip}</p>
-                    </div>
-                    <div className="text-right">
-                      <p className="text-slate-400 text-sm">Usage</p>
-                      <p className="text-white">{device.usage} GB/h</p>
-                    </div>
-                    <div className="w-32">
-                      <Progress
-                        value={(device.usage / 5) * 100}
-                        className="h-2"
-                      />
-                    </div>
-                    <Dialog>
+                  {!readOnly && (
+                    <Dialog open={showAddDevice} onOpenChange={setShowAddDevice}>
                       <DialogTrigger asChild>
-                        <Button size="sm" variant="outline" className="border-slate-600 text-slate-300">
-                          Manage
+                        <Button className="bg-green-600 hover:bg-green-700">
+                          Add Device
                         </Button>
                       </DialogTrigger>
                       <DialogContent>
                         <DialogHeader>
-                          <DialogTitle>Manage Device</DialogTitle>
+                          <DialogTitle>Add New Device</DialogTitle>
                         </DialogHeader>
-                        <p>Do you want to disconnect this device?</p>
+                        <div className="space-y-4">
+                          <div>
+                            <Label htmlFor="deviceName">Device Name</Label>
+                            <Input
+                              id="deviceName"
+                              value={newDevice.name}
+                              onChange={(e) => setNewDevice({...newDevice, name: e.target.value})}
+                              placeholder="Enter device name"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="deviceType">Device Type</Label>
+                            <Select value={newDevice.type} onValueChange={(value) => setNewDevice({...newDevice, type: value})}>
+                              <SelectTrigger>
+                                <SelectValue />
+                              </SelectTrigger>
+                              <SelectContent>
+                                <SelectItem value="desktop">Desktop</SelectItem>
+                                <SelectItem value="laptop">Laptop</SelectItem>
+                                <SelectItem value="mobile">Mobile</SelectItem>
+                                <SelectItem value="tablet">Tablet</SelectItem>
+                              </SelectContent>
+                            </Select>
+                          </div>
+                          <div>
+                            <Label htmlFor="deviceUser">User Email</Label>
+                            <Input
+                              id="deviceUser"
+                              value={newDevice.user}
+                              onChange={(e) => setNewDevice({...newDevice, user: e.target.value})}
+                              placeholder="Enter user email"
+                            />
+                          </div>
+                          <div>
+                            <Label htmlFor="deviceIP">IP Address</Label>
+                            <Input
+                              id="deviceIP"
+                              value={newDevice.ip}
+                              onChange={(e) => setNewDevice({...newDevice, ip: e.target.value})}
+                              placeholder="Enter IP address"
+                            />
+                          </div>
+                        </div>
                         <DialogFooter>
-                          <Button variant="destructive" onClick={async () => {
-                            await updateDoc(doc(db, "devices", device.id), { status: "inactive" });
-                          }}>
-                            Disconnect
+                          <Button variant="outline" onClick={() => setShowAddDevice(false)} className="border-slate-600 text-slate-300">
+                            Cancel
                           </Button>
-                          {device.status === 'inactive' && (
-                            <Button variant="default" onClick={async () => {
-                              await updateDoc(doc(db, "devices", device.id), { status: "active" });
-                            }}>
-                              Activate
-                            </Button>
-                          )}
-                          {!readOnly && (
-                            <Button 
-                              variant="destructive" 
-                              onClick={() => handleDeleteDevice(device.id)}
-                              className="bg-red-600 hover:bg-red-700"
-                            >
-                              Delete
-                            </Button>
-                          )}
+                          <Button 
+                            onClick={handleAddDevice} 
+                            disabled={isAddingDevice}
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            {isAddingDevice ? 'Adding...' : 'Add Device'}
+                          </Button>
                         </DialogFooter>
                       </DialogContent>
                     </Dialog>
-                  </div>
+                  )}
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="space-y-4">
+                  {devices.map((device) => (
+                    <div key={device.id} className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
+                      <div className="flex items-center gap-4">
+                        <div className="flex items-center gap-2">
+                          {getDeviceIcon(device.type)}
+                          <span className="text-white font-medium">{device.name}</span>
+                        </div>
+                        <Badge
+                          variant={device.status === 'active' ? 'default' : 'secondary'}
+                          className={device.status === 'active' ? 'bg-green-600' : 'bg-gray-600'}
+                        >
+                          {device.status}
+                        </Badge>
+                      </div>
+                      <div className="flex items-center gap-6">
+                        <div className="text-right">
+                          <p className="text-slate-400 text-sm">User</p>
+                          <p className="text-white">{device.user}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-slate-400 text-sm">IP Address</p>
+                          <p className="text-white">{device.ip}</p>
+                        </div>
+                        <div className="text-right">
+                          <p className="text-slate-400 text-sm">Usage</p>
+                          <p className="text-white">{device.usage} GB/h</p>
+                        </div>
+                        <div className="w-32">
+                          <Progress
+                            value={(device.usage / 5) * 100}
+                            className="h-2"
+                          />
+                        </div>
+                        <Dialog>
+                          <DialogTrigger asChild>
+                            <Button size="sm" variant="outline" className="border-slate-600 text-slate-300">
+                              Manage
+                            </Button>
+                          </DialogTrigger>
+                          <DialogContent>
+                            <DialogHeader>
+                              <DialogTitle>Manage Device</DialogTitle>
+                            </DialogHeader>
+                            <p>Do you want to disconnect this device?</p>
+                            <DialogFooter>
+                              <Button variant="destructive" onClick={async () => {
+                                await updateDoc(doc(db, "devices", device.id), { status: "inactive" });
+                              }}>
+                                Disconnect
+                              </Button>
+                              {device.status === 'inactive' && (
+                                <Button variant="default" onClick={async () => {
+                                  await updateDoc(doc(db, "devices", device.id), { status: "active" });
+                                }}>
+                                  Activate
+                                </Button>
+                              )}
+                              {!readOnly && (
+                                <Button 
+                                  variant="destructive" 
+                                  onClick={() => handleDeleteDevice(device.id)}
+                                  className="bg-red-600 hover:bg-red-700"
+                                >
+                                  Delete
+                                </Button>
+                              )}
+                            </DialogFooter>
+                          </DialogContent>
+                        </Dialog>
+                      </div>
+                    </div>
+                  ))}
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
+              </CardContent>
+            </Card>
+          </TabsContent>
+        </Tabs>
       </div>
     </div>
   );

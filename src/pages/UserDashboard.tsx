@@ -15,7 +15,9 @@ import {
   Cpu,
   MemoryStick,
   HardDrive,
-  TrendingUp
+  TrendingUp,
+  User,
+  RefreshCw
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
@@ -29,6 +31,7 @@ const UserDashboard = () => {
   const {
     networkStatus,
     systemInfo,
+    userBandwidth,
     isLoading: networkLoading,
     error: networkError,
     isConnected,
@@ -37,7 +40,8 @@ const UserDashboard = () => {
     activeInterfaces,
     bandwidthGBh,
     hasRealData,
-    validateEmail
+    validateEmail,
+    getUserBandwidth
   } = useRealNetwork();
 
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
@@ -300,6 +304,79 @@ const UserDashboard = () => {
         {/* Machine Information and Email Validation */}
         {hasRealData && systemInfo && (
           <div className="mb-8">
+            {/* User's Current Machine Bandwidth */}
+            <Card className="bg-slate-800/50 border-slate-700">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <User className="h-5 w-5 text-blue-400" />
+                  Your Current Machine Bandwidth
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {user ? (
+                  <div className="space-y-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                      <div className="text-center p-4 bg-slate-700/30 rounded-lg">
+                        <div className="text-2xl font-bold text-green-400">
+                          {userBandwidth ? `${userBandwidth.bandwidth.current.total.toFixed(2)} Mbps` : '0.00 Mbps'}
+                        </div>
+                        <div className="text-sm text-slate-400">Current Total</div>
+                      </div>
+                      <div className="text-center p-4 bg-slate-700/30 rounded-lg">
+                        <div className="text-2xl font-bold text-blue-400">
+                          {userBandwidth ? `${userBandwidth.bandwidth.current.download.toFixed(2)} Mbps` : '0.00 Mbps'}
+                        </div>
+                        <div className="text-sm text-slate-400">Download</div>
+                      </div>
+                      <div className="text-center p-4 bg-slate-700/30 rounded-lg">
+                        <div className="text-2xl font-bold text-purple-400">
+                          {userBandwidth ? `${userBandwidth.bandwidth.current.upload.toFixed(2)} Mbps` : '0.00 Mbps'}
+                        </div>
+                        <div className="text-sm text-slate-400">Upload</div>
+                      </div>
+                    </div>
+                    
+                    {userBandwidth && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div className="p-4 bg-slate-700/30 rounded-lg">
+                          <h4 className="font-medium text-white mb-2">Machine Info</h4>
+                          <div className="text-sm text-slate-300 space-y-1">
+                            <div>Hostname: {userBandwidth.user.machine.hostname}</div>
+                            <div>Platform: {userBandwidth.user.machine.platform}</div>
+                            <div>Architecture: {userBandwidth.user.machine.arch}</div>
+                          </div>
+                        </div>
+                        <div className="p-4 bg-slate-700/30 rounded-lg">
+                          <h4 className="font-medium text-white mb-2">Total Usage</h4>
+                          <div className="text-sm text-slate-300 space-y-1">
+                            <div>Total: {userBandwidth.bandwidth.total.usageGB.toFixed(2)} GB</div>
+                            <div>Received: {formatBytes(userBandwidth.bandwidth.total.received)}</div>
+                            <div>Sent: {formatBytes(userBandwidth.bandwidth.total.sent)}</div>
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                    
+                    <div className="flex justify-center">
+                      <Button
+                        onClick={() => getUserBandwidth(user.email || '')}
+                        disabled={networkLoading}
+                        className="bg-blue-600 hover:bg-blue-700"
+                      >
+                        <RefreshCw className={`h-4 w-4 mr-2 ${networkLoading ? 'animate-spin' : ''}`} />
+                        Refresh My Bandwidth
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-8 text-slate-400">
+                    <User className="h-12 w-12 mx-auto mb-4 text-slate-600" />
+                    <p>Please log in to view your bandwidth usage</p>
+                  </div>
+                )}
+              </CardContent>
+            </Card>
+
             <MachineInfo systemInfo={systemInfo} validateEmail={validateEmail} />
           </div>
         )}

@@ -381,6 +381,117 @@ app.post('/api/validate/email', async (req, res) => {
   }
 });
 
+// Get current user's machine bandwidth usage
+app.get('/api/user/bandwidth', async (req, res) => {
+  try {
+    const { userEmail } = req.query;
+    
+    if (!userEmail) {
+      return res.status(400).json({
+        success: false,
+        error: 'User email is required'
+      });
+    }
+
+    // Get current network stats
+    const stats = await getNetworkStats();
+    if (stats.length === 0) {
+      return res.status(500).json({
+        success: false,
+        error: 'Unable to get network statistics'
+      });
+    }
+
+    // Calculate current bandwidth
+    const now = Date.now();
+    const timeDiff = now - networkStats.current.timestamp;
+    
+    // Sum up all active interfaces for current user
+    const totalStats = stats.reduce((acc, stat) => ({
+      bytesReceived: acc.bytesReceived + (stat.rx_bytes || 0),
+      bytesSent: acc.bytesSent + (stat.tx_bytes || 0),
+      packetsReceived: acc.packetsReceived + (stat.rx_packets || 0),
+      packetsSent: acc.packetsSent + (stat.tx_packets || 0)
+    }), { bytesReceived: 0, bytesSent: 0, packetsReceived: 0, packetsSent: 0 });
+
+    const bandwidth = calculateBandwidth(totalStats, networkStats.previous, timeDiff);
+    
+    // Get network interfaces for this user's machine
+    const interfaces = await getNetworkInterfaces();
+    
+    // Calculate total usage in GB
+    const totalBytesReceived = totalStats.bytesReceived;
+    const totalBytesSent = totalStats.bytesSent;
+    const totalUsageGB = (totalBytesReceived + totalBytesSent) / (1024 * 1024 * 1024);
+
+    // Get system info for this machine
+    const [cpu, mem, os] = await Promise.all([
+      si.cpu(),
+      si.mem(),
+      si.osInfo()
+    ]);
+
+    res.json({
+      success: true,
+      data: {
+        user: {
+          email: userEmail,
+          machine: {
+            hostname: os.hostname,
+            platform: os.platform,
+            release: os.release,
+            arch: os.arch
+          }
+        },
+        bandwidth: {
+          current: {
+            download: bandwidth.download,
+            upload: bandwidth.upload,
+            total: bandwidth.total
+          },
+          total: {
+            received: totalBytesReceived,
+            sent: totalBytesSent,
+            usageGB: totalUsageGB
+          }
+        },
+        network: {
+          interfaces: interfaces.map(iface => ({
+            name: iface.iface,
+            type: iface.type,
+            ip4: iface.ip4,
+            mac: iface.mac,
+            speed: iface.speed,
+            duplex: iface.duplex,
+            operstate: iface.operstate
+          }))
+        },
+        system: {
+          cpu: {
+            model: cpu.model,
+            cores: cpu.cores,
+            speed: cpu.speed,
+            load: cpu.load
+          },
+          memory: {
+            total: mem.total,
+            used: mem.used,
+            free: mem.free,
+            available: mem.available
+          }
+        },
+        timestamp: now
+      }
+    });
+  } catch (error) {
+    console.error('User bandwidth error:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get user bandwidth data'
+    });
+  }
+});
+
 // Health check
 app.get('/api/health', (req, res) => {
   res.json({
