@@ -98,6 +98,7 @@ const AdminDashboard = () => {
             const bandwidthData = await getUserBandwidth(userData.email);
             if (bandwidthData) {
               userBandwidthData[userData.email] = bandwidthData;
+              // Use the same calculation as User Dashboard (Mbps)
               totalRealBandwidth += bandwidthData.bandwidth.current.total;
             }
           } catch (error) {
@@ -107,6 +108,7 @@ const AdminDashboard = () => {
       }
       
       setRealUserBandwidth(userBandwidthData);
+      // Store total bandwidth in Mbps (same as User Dashboard)
       setTotalBandwidthUsage(totalRealBandwidth);
     } catch (error) {
       console.error('Error fetching real user bandwidth:', error);
@@ -510,8 +512,8 @@ const AdminDashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-slate-400 text-sm">Real User Bandwidth</p>
-                  <p className="text-2xl font-bold text-white">{totalBandwidthUsage.toFixed(2)} Mbps</p>
-                  <p className="text-xs text-slate-500">From {realUsers.length} real users</p>
+                  <p className="text-2xl font-bold text-white">{(totalBandwidthUsage * 0.45).toFixed(2)} GB/h</p>
+                  <p className="text-xs text-slate-500">From {realUsers.length} real users (converted to GB/h)</p>
                 </div>
                 <TrendingUp className="h-8 w-8 text-green-400" />
               </div>
@@ -523,8 +525,8 @@ const AdminDashboard = () => {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-slate-400 text-sm">System Bandwidth</p>
-                  <p className="text-2xl font-bold text-white">{hasRealData ? currentBandwidth.total.toFixed(2) : '0.00'} Mbps</p>
-                  <p className="text-xs text-slate-500">Current system total</p>
+                  <p className="text-2xl font-bold text-white">{hasRealData ? (currentBandwidth.total * 0.45).toFixed(2) : '0.00'} GB/h</p>
+                  <p className="text-xs text-slate-500">Current system total (converted to GB/h)</p>
                 </div>
                 <Shield className="h-8 w-8 text-yellow-400" />
               </div>
@@ -792,8 +794,7 @@ const AdminDashboard = () => {
             </div>
           </CardContent>
         </Card>
-
-
+        </TabsContent>
 
           <TabsContent value="visitors" className="space-y-6">
             <VisitorsNetworkManager />
