@@ -13,12 +13,15 @@ import {
   Laptop,
   Settings,
   TrendingUp,
-  Wifi
+  Wifi,
+  Server,
+  AlertCircle
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar, PieChart, Pie, Cell } from 'recharts';
 import { db, handleFirestoreError } from "@/lib/firebase";
 import { collection, onSnapshot, query, orderBy, limit, doc, addDoc, serverTimestamp, updateDoc, getDoc, setDoc } from "firebase/firestore";
+import { useRealNetwork } from "@/hooks/use-real-network";
 
 const UserDashboard = () => {
   const navigate = useNavigate();
@@ -36,6 +39,20 @@ const UserDashboard = () => {
   
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
   const readOnly = user.role === 'admin';
+
+  // Real network data hook
+  const {
+    networkStatus,
+    systemInfo,
+    isLoading: networkLoading,
+    error: networkError,
+    isConnected,
+    currentBandwidth,
+    bandwidthHistory,
+    activeInterfaces,
+    bandwidthGBh,
+    hasRealData
+  } = useRealNetwork();
 
   // Get selected network from sessionStorage
   useEffect(() => {
@@ -67,16 +84,22 @@ const UserDashboard = () => {
     
     const interval = setInterval(async () => {
       try {
-        // Calculate current usage from assigned devices
-        let deviceUsage = 0;
-        if (assignedDevices.length > 0) {
-          deviceUsage = assignedDevices.reduce((sum: number, device: any) => {
-            return sum + (device.usage || 0);
-          }, 0);
+        // Use real network data if available, otherwise fallback to existing logic
+        let currentUsage = 0;
+        
+        if (hasRealData && bandwidthGBh) {
+          // Use real network bandwidth data
+          currentUsage = bandwidthGBh.total;
+        } else {
+          // Fallback to existing logic
+          let deviceUsage = 0;
+          if (assignedDevices.length > 0) {
+            deviceUsage = assignedDevices.reduce((sum: number, device: any) => {
+              return sum + (device.usage || 0);
+            }, 0);
+          }
+          currentUsage = (userStats as any).currentUsage || deviceUsage || Math.random() * 3 + 0.5;
         }
-
-        // Use actual user data from Firestore, fallback to device usage, then to random
-        const currentUsage = (userStats as any).currentUsage || deviceUsage || Math.random() * 3 + 0.5;
         const timestamp = new Date();
 
         // Update userStats with current usage
@@ -413,17 +436,44 @@ const UserDashboard = () => {
               <Monitor className="h-8 w-8 text-cyan-400" />
               <div>
                 <h1 className="text-2xl font-bold text-white">My Usage Dashboard</h1>
-                {selectedNetwork && networkInfo && (
-                  <div className="flex items-center gap-2 mt-1">
-                    <Wifi className="h-4 w-4 text-blue-400" />
-                    <span className="text-sm text-slate-300">
-                      Connected to: <span className="font-medium text-blue-400">{networkInfo.name}</span>
-                      <span className={`ml-2 w-2 h-2 rounded-full inline-block ${
-                        networkInfo.status === 'active' ? 'bg-green-400' : 'bg-yellow-400'
-                      }`}></span>
-                    </span>
+                <div className="flex items-center gap-4 mt-1">
+                  {selectedNetwork && networkInfo && (
+                    <div className="flex items-center gap-2">
+                      <Wifi className="h-4 w-4 text-blue-400" />
+                      <span className="text-sm text-slate-300">
+                        Connected to: <span className="font-medium text-blue-400">{networkInfo.name}</span>
+                        <span className={`ml-2 w-2 h-2 rounded-full inline-block ${
+                          networkInfo.status === 'active' ? 'bg-green-400' : 'bg-yellow-400'
+                        }`}></span>
+                      </span>
+                    </div>
+                  )}
+                  
+                  {/* Real Network Data Status */}
+                  <div className="flex items-center gap-2">
+                    {hasRealData ? (
+                      <>
+                        <Server className="h-4 w-4 text-green-400" />
+                        <span className="text-sm text-green-400 font-medium">Real Network Data</span>
+                      </>
+                    ) : networkError ? (
+                      <>
+                        <AlertCircle className="h-4 w-4 text-red-400" />
+                        <span className="text-sm text-red-400">Network Monitor Offline</span>
+                      </>
+                    ) : networkLoading ? (
+                      <>
+                        <Activity className="h-4 w-4 text-yellow-400 animate-spin" />
+                        <span className="text-sm text-yellow-400">Connecting...</span>
+                      </>
+                    ) : (
+                      <>
+                        <Server className="h-4 w-4 text-gray-400" />
+                        <span className="text-sm text-gray-400">Simulated Data</span>
+                      </>
+                    )}
                   </div>
-                )}
+                </div>
               </div>
             </div>
             <Button
@@ -521,6 +571,48 @@ const UserDashboard = () => {
           </CardContent>
         </Card>
 
+        {/* Real Network Interfaces */}
+        {hasRealData && activeInterfaces.length > 0 && (
+          <Card className="mb-6 bg-slate-800/50 border-slate-700">
+            <CardHeader>
+              <CardTitle className="text-white flex items-center gap-2">
+                <Server className="h-5 w-5 text-green-400" />
+                Real Network Interfaces
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                {activeInterfaces.map((iface, index) => (
+                  <div key={index} className="p-3 bg-slate-700/50 rounded-lg border border-slate-600">
+                    <div className="flex items-center justify-between mb-2">
+                      <span className="text-sm font-medium text-white">{iface.iface}</span>
+                      <Badge variant="outline" className="border-green-500 text-green-400 text-xs">
+                        {iface.type}
+                      </Badge>
+                    </div>
+                    <div className="space-y-1 text-xs">
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">IP Address:</span>
+                        <span className="text-white font-mono">{iface.ip4}</span>
+                      </div>
+                      <div className="flex justify-between">
+                        <span className="text-slate-400">MAC:</span>
+                        <span className="text-white font-mono">{iface.mac}</span>
+                      </div>
+                      {iface.speed && (
+                        <div className="flex justify-between">
+                          <span className="text-slate-400">Speed:</span>
+                          <span className="text-white">{iface.speed} Mbps</span>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </CardContent>
+          </Card>
+        )}
+
         {/* Real-Time Data Collection Status */}
         <div className="mb-6 p-4 bg-slate-800/50 border border-slate-700 rounded-lg">
           <div className="flex items-center justify-between">
@@ -532,7 +624,11 @@ const UserDashboard = () => {
             </div>
             <div className="flex items-center gap-4">
               <div className="text-sm text-slate-400">
-                Syncing with {assignedDevices.length} assigned devices
+                {hasRealData ? (
+                  `Real network data: ${currentBandwidth.download.toFixed(2)}↓ ${currentBandwidth.upload.toFixed(2)}↑ Mbps`
+                ) : (
+                  `Syncing with ${assignedDevices.length} assigned devices`
+                )}
               </div>
               <Button
                 variant="outline"
@@ -545,7 +641,11 @@ const UserDashboard = () => {
             </div>
           </div>
           <div className="mt-2 text-xs text-slate-500">
-            Current usage syncs with: {assignedDevices.length > 0 ? 'Device usage from Firestore' : 'Simulated data'}
+            {hasRealData ? (
+              'Current usage from real network monitoring'
+            ) : (
+              `Current usage syncs with: ${assignedDevices.length > 0 ? 'Device usage from Firestore' : 'Simulated data'}`
+            )}
           </div>
           <div className="mt-2 text-xs text-slate-400">
             Debug: userStats={JSON.stringify({ currentUsage, usedData, dataLimit })} | 
