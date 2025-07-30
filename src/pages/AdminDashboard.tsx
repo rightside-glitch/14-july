@@ -50,6 +50,8 @@ const AdminDashboard = () => {
   const [activeTab, setActiveTab] = useState('overview');
   const [realUsers, setRealUsers] = useState([]);
   const [realUserBandwidth, setRealUserBandwidth] = useState({});
+  const [lastUserCount, setLastUserCount] = useState(0);
+  const [newUserNotification, setNewUserNotification] = useState('');
   const user = JSON.parse(sessionStorage.getItem('user') || '{}');
   
   // Real network data hook
@@ -132,18 +134,32 @@ const AdminDashboard = () => {
     return () => unsub();
   }, []);
 
-  // Listen to Firestore users collection for user count and fetch real user data
+  // Listen to Firestore users collection for ALL users (including admins) in real-time
   useEffect(() => {
-    console.log('Setting up users listener...');
+    console.log('Setting up ALL users listener...');
     // Initial fetch in case onSnapshot doesn't fire if collection is empty
     getDocs(collection(db, "users"))
       .then(snapshot => {
-        const regularUsers = snapshot.docs.filter(doc => doc.data().role === 'user');
-        setUserCount(regularUsers.length);
-        setRealUsers(regularUsers.map(doc => ({ id: doc.id, ...doc.data() })));
+        const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const regularUsers = allUsers.filter(user => user.role === 'user');
+        const adminUsers = allUsers.filter(user => user.role === 'admin');
         
-        // Fetch bandwidth data for each real user
-        fetchRealUserBandwidth(regularUsers);
+        setUserCount(regularUsers.length);
+        setRealUsers(allUsers); // Store ALL users for monitoring
+        
+        // Check for new user signups
+        if (lastUserCount > 0 && allUsers.length > lastUserCount) {
+          const newUsers = allUsers.slice(lastUserCount);
+          const newUserNames = newUsers.map(u => u.email || u.phoneNumber).join(', ');
+          setNewUserNotification(`New user(s) signed up: ${newUserNames}`);
+          setTimeout(() => setNewUserNotification(''), 5000); // Clear after 5 seconds
+        }
+        setLastUserCount(allUsers.length);
+        
+        console.log(`Found ${allUsers.length} total users: ${regularUsers.length} regular users, ${adminUsers.length} admins`);
+        
+        // Fetch bandwidth data for each user (both regular and admin)
+        fetchRealUserBandwidth(snapshot.docs);
       })
       .catch(error => {
         handleFirestoreError(error, 'initial users fetch');
@@ -152,12 +168,26 @@ const AdminDashboard = () => {
     const unsub = onSnapshot(
       collection(db, "users"), 
       (snapshot) => {
-        const regularUsers = snapshot.docs.filter(doc => doc.data().role === 'user');
-        setUserCount(regularUsers.length);
-        setRealUsers(regularUsers.map(doc => ({ id: doc.id, ...doc.data() })));
+        const allUsers = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() }));
+        const regularUsers = allUsers.filter(user => user.role === 'user');
+        const adminUsers = allUsers.filter(user => user.role === 'admin');
         
-        // Fetch bandwidth data for each real user
-        fetchRealUserBandwidth(regularUsers);
+        setUserCount(regularUsers.length);
+        setRealUsers(allUsers); // Store ALL users for monitoring
+        
+        // Check for new user signups in real-time
+        if (lastUserCount > 0 && allUsers.length > lastUserCount) {
+          const newUsers = allUsers.slice(lastUserCount);
+          const newUserNames = newUsers.map(u => u.email || u.phoneNumber).join(', ');
+          setNewUserNotification(`New user(s) signed up: ${newUserNames}`);
+          setTimeout(() => setNewUserNotification(''), 5000); // Clear after 5 seconds
+        }
+        setLastUserCount(allUsers.length);
+        
+        console.log(`Real-time update: ${allUsers.length} total users: ${regularUsers.length} regular users, ${adminUsers.length} admins`);
+        
+        // Fetch bandwidth data for each user (both regular and admin)
+        fetchRealUserBandwidth(snapshot.docs);
       },
       (error) => {
         handleFirestoreError(error, 'users listener');
@@ -424,6 +454,16 @@ const AdminDashboard = () => {
       </div>
 
       <div className="container mx-auto px-4 py-8">
+        {/* New User Notification */}
+        {newUserNotification && (
+          <div className="mb-6 p-4 bg-green-500/20 border border-green-500/50 rounded-lg">
+            <div className="flex items-center gap-2">
+              <Users className="h-5 w-5 text-green-400" />
+              <span className="text-green-400 font-medium">{newUserNotification}</span>
+            </div>
+          </div>
+        )}
+        
         {/* Tabs Navigation */}
         <Tabs value={activeTab} onValueChange={setActiveTab} className="w-full">
           <TabsList className="grid w-full grid-cols-3 bg-slate-800/50 border-slate-700">
@@ -464,6 +504,36 @@ const AdminDashboard = () => {
                 </div>
               </div>
             </div>
+
+            {/* User Summary */}
+            <Card className="bg-slate-800/50 border-slate-700 mb-6">
+              <CardHeader>
+                <CardTitle className="text-white flex items-center gap-2">
+                  <Users className="h-5 w-5 text-blue-400" />
+                  Real-Time User Summary
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <div className="text-center p-4 bg-slate-700/30 rounded-lg">
+                    <div className="text-2xl font-bold text-white">{realUsers.length}</div>
+                    <div className="text-sm text-slate-400">Total Users</div>
+                  </div>
+                  <div className="text-center p-4 bg-slate-700/30 rounded-lg">
+                    <div className="text-2xl font-bold text-blue-400">
+                      {realUsers.filter(u => u.role === 'user').length}
+                    </div>
+                    <div className="text-sm text-slate-400">Regular Users</div>
+                  </div>
+                  <div className="text-center p-4 bg-slate-700/30 rounded-lg">
+                    <div className="text-2xl font-bold text-red-400">
+                      {realUsers.filter(u => u.role === 'admin').length}
+                    </div>
+                    <div className="text-sm text-slate-400">Administrators</div>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
 
             {/* Stats Cards */}
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
@@ -522,13 +592,13 @@ const AdminDashboard = () => {
           </Card>
         </div>
 
-        {/* Real User Bandwidth Data */}
+        {/* All Users Real-Time Monitoring */}
         <Card className="bg-slate-800/50 border-slate-700">
           <CardHeader>
             <CardTitle className="text-white flex items-center justify-between">
               <div className="flex items-center gap-2">
                 <Activity className="h-5 w-5 text-green-400" />
-                Real User Bandwidth Monitoring
+                All Users Real-Time Monitoring
               </div>
               <Button
                 size="sm"
@@ -546,7 +616,7 @@ const AdminDashboard = () => {
             {realUsers.length === 0 ? (
               <div className="text-center py-8 text-slate-400">
                 <Users className="h-12 w-12 mx-auto mb-4 text-slate-600" />
-                <p>No real users found</p>
+                <p>No users found</p>
               </div>
             ) : (
               <div className="space-y-4">
@@ -557,7 +627,15 @@ const AdminDashboard = () => {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-4">
                           <div>
-                            <h3 className="font-medium text-white">{user.email}</h3>
+                            <div className="flex items-center gap-2">
+                              <h3 className="font-medium text-white">{user.email}</h3>
+                              <Badge 
+                                variant="outline" 
+                                className={user.role === 'admin' ? 'border-red-500 text-red-400' : 'border-blue-500 text-blue-400'}
+                              >
+                                {user.role === 'admin' ? 'Admin' : 'User'}
+                              </Badge>
+                            </div>
                             <p className="text-sm text-slate-400">User ID: {user.id}</p>
                           </div>
                           
