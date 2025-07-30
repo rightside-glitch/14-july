@@ -23,6 +23,7 @@ import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useRealNetwork } from "@/hooks/use-real-network";
 import { MachineInfo } from "@/components/MachineInfo";
+import NetworkOverview from "@/components/NetworkOverview";
 
 const UserDashboard = () => {
   const navigate = useNavigate();
@@ -32,6 +33,9 @@ const UserDashboard = () => {
     networkStatus,
     systemInfo,
     userBandwidth,
+    currentWiFi,
+    availableWiFi,
+    ethernetNetworks,
     isLoading: networkLoading,
     error: networkError,
     isConnected,
@@ -378,6 +382,13 @@ const UserDashboard = () => {
             </Card>
 
             <MachineInfo systemInfo={systemInfo} validateEmail={validateEmail} />
+            
+            {/* Network Overview - WiFi and Ethernet */}
+            <NetworkOverview 
+              currentWiFi={currentWiFi}
+              availableWiFi={availableWiFi}
+              ethernetNetworks={ethernetNetworks}
+            />
           </div>
         )}
 

@@ -33,19 +33,116 @@ let networkStats = {
   history: []
 };
 
-// Get current network interfaces
+// Get current network interfaces with enhanced WiFi and Ethernet info
 async function getNetworkInterfaces() {
   try {
     const networkInterfaces = await si.networkInterfaces();
-    return networkInterfaces.filter(iface => 
-      iface.operstate === 'up' && 
-      iface.type !== 'loopback' &&
-      iface.ip4
-    );
+    const enhancedInterfaces = [];
+    
+    for (const iface of networkInterfaces) {
+      if (iface.operstate === 'up' && iface.type !== 'loopback' && iface.ip4) {
+        let enhancedIface = { ...iface };
+        
+        // Add WiFi SSID if it's a wireless interface
+        if (iface.type === 'wireless' || iface.iface.toLowerCase().includes('wifi') || iface.iface.toLowerCase().includes('wireless')) {
+          try {
+            const wifiInfo = await getCurrentWiFiSSID(iface.iface);
+            enhancedIface.ssid = wifiInfo.ssid;
+            enhancedIface.signalStrength = wifiInfo.signalStrength;
+            enhancedIface.security = wifiInfo.security;
+          } catch (error) {
+            console.log(`Could not get WiFi info for ${iface.iface}:`, error.message);
+            enhancedIface.ssid = null;
+          }
+        }
+        
+        // Add Ethernet info if it's a wired interface
+        if (iface.type === 'wired' || iface.iface.toLowerCase().includes('ethernet')) {
+          enhancedIface.connectionType = 'Ethernet';
+          enhancedIface.maxBandwidth = getEthernetMaxBandwidth(iface.speed);
+        }
+        
+        enhancedInterfaces.push(enhancedIface);
+      }
+    }
+    
+    return enhancedInterfaces;
   } catch (error) {
     console.error('Error getting network interfaces:', error);
     return [];
   }
+}
+
+// Get current WiFi SSID and signal strength
+async function getCurrentWiFiSSID(interfaceName) {
+  try {
+    // Use systeminformation to get WiFi info
+    const wifiConnections = await si.wifiConnections();
+    const currentConnection = wifiConnections.find(conn => 
+      conn.iface === interfaceName || conn.iface.toLowerCase().includes(interfaceName.toLowerCase())
+    );
+    
+    if (currentConnection) {
+      return {
+        ssid: currentConnection.ssid,
+        signalStrength: currentConnection.signal,
+        security: currentConnection.security,
+        frequency: currentConnection.frequency
+      };
+    }
+    
+    // Fallback: try to get from networkInterfaces
+    const interfaces = await si.networkInterfaces();
+    const wifiInterface = interfaces.find(iface => 
+      iface.iface === interfaceName && 
+      (iface.type === 'wireless' || iface.iface.toLowerCase().includes('wifi'))
+    );
+    
+    if (wifiInterface) {
+      return {
+        ssid: wifiInterface.ssid || 'Unknown',
+        signalStrength: wifiInterface.signal || 0,
+        security: wifiInterface.security || 'Unknown',
+        frequency: wifiInterface.frequency || 0
+      };
+    }
+    
+    return { ssid: 'Unknown', signalStrength: 0, security: 'Unknown', frequency: 0 };
+  } catch (error) {
+    console.error('Error getting WiFi SSID:', error);
+    return { ssid: 'Error', signalStrength: 0, security: 'Unknown', frequency: 0 };
+  }
+}
+
+// Get available WiFi networks
+async function getAvailableWiFiNetworks() {
+  try {
+    const wifiNetworks = await si.wifiNetworks();
+    return wifiNetworks.map(network => ({
+      ssid: network.ssid,
+      signalStrength: network.signal,
+      security: network.security,
+      frequency: network.frequency,
+      channel: network.channel,
+      quality: network.quality
+    }));
+  } catch (error) {
+    console.error('Error getting available WiFi networks:', error);
+    return [];
+  }
+}
+
+// Get Ethernet max bandwidth based on speed
+function getEthernetMaxBandwidth(speed) {
+  if (!speed) return 'Unknown';
+  
+  const speedNum = parseInt(speed);
+  if (speedNum >= 10000) return '10 Gbps';
+  if (speedNum >= 1000) return '1 Gbps';
+  if (speedNum >= 100) return '100 Mbps';
+  if (speedNum >= 10) return '10 Mbps';
+  
+  return `${speed} Mbps`;
 }
 
 // Get network statistics
@@ -188,6 +285,133 @@ app.get('/api/network/bandwidth', async (req, res) => {
     res.status(500).json({
       success: false,
       error: 'Failed to get bandwidth data'
+    });
+  }
+});
+
+// Get current WiFi SSID and connection info
+app.get('/api/network/wifi/current', async (req, res) => {
+  try {
+    const interfaces = await getNetworkInterfaces();
+    const wifiInterfaces = interfaces.filter(iface => 
+      iface.type === 'wireless' || 
+      iface.iface.toLowerCase().includes('wifi') || 
+      iface.iface.toLowerCase().includes('wireless')
+    );
+    
+    const wifiInfo = wifiInterfaces.map(iface => ({
+      interface: iface.iface,
+      ssid: iface.ssid,
+      signalStrength: iface.signalStrength,
+      security: iface.security,
+      frequency: iface.frequency,
+      ip4: iface.ip4,
+      mac: iface.mac,
+      speed: iface.speed
+    }));
+    
+    res.json({
+      success: true,
+      data: wifiInfo
+    });
+  } catch (error) {
+    console.error('Error in /api/network/wifi/current:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get current WiFi info'
+    });
+  }
+});
+
+// Get available WiFi networks
+app.get('/api/network/wifi/available', async (req, res) => {
+  try {
+    const availableNetworks = await getAvailableWiFiNetworks();
+    res.json({
+      success: true,
+      data: availableNetworks
+    });
+  } catch (error) {
+    console.error('Error in /api/network/wifi/available:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get available WiFi networks'
+    });
+  }
+});
+
+// Get Ethernet networks and their bandwidth
+app.get('/api/network/ethernet', async (req, res) => {
+  try {
+    const interfaces = await getNetworkInterfaces();
+    const ethernetInterfaces = interfaces.filter(iface => 
+      iface.type === 'wired' || 
+      iface.iface.toLowerCase().includes('ethernet')
+    );
+    
+    const ethernetInfo = ethernetInterfaces.map(iface => ({
+      interface: iface.iface,
+      connectionType: iface.connectionType,
+      maxBandwidth: iface.maxBandwidth,
+      currentSpeed: iface.speed,
+      ip4: iface.ip4,
+      mac: iface.mac,
+      duplex: iface.duplex,
+      operstate: iface.operstate
+    }));
+    
+    res.json({
+      success: true,
+      data: ethernetInfo
+    });
+  } catch (error) {
+    console.error('Error in /api/network/ethernet:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get Ethernet networks'
+    });
+  }
+});
+
+// Get comprehensive network overview
+app.get('/api/network/overview', async (req, res) => {
+  try {
+    const [interfaces, availableWifi, stats] = await Promise.all([
+      getNetworkInterfaces(),
+      getAvailableWiFiNetworks(),
+      updateNetworkStats()
+    ]);
+    
+    const wifiInterfaces = interfaces.filter(iface => 
+      iface.type === 'wireless' || 
+      iface.iface.toLowerCase().includes('wifi') || 
+      iface.iface.toLowerCase().includes('wireless')
+    );
+    
+    const ethernetInterfaces = interfaces.filter(iface => 
+      iface.type === 'wired' || 
+      iface.iface.toLowerCase().includes('ethernet')
+    );
+    
+    res.json({
+      success: true,
+      data: {
+        currentConnections: {
+          wifi: wifiInterfaces,
+          ethernet: ethernetInterfaces
+        },
+        availableNetworks: {
+          wifi: availableWifi
+        },
+        bandwidth: stats?.bandwidth || { download: 0, upload: 0, total: 0 },
+        timestamp: Date.now()
+      }
+    });
+  } catch (error) {
+    console.error('Error in /api/network/overview:', error);
+    res.status(500).json({
+      success: false,
+      error: 'Failed to get network overview'
     });
   }
 });

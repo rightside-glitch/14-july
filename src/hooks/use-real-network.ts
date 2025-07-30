@@ -7,6 +7,44 @@ interface NetworkInterface {
   mac: string;
   operstate: string;
   speed: number;
+  ssid?: string;
+  signalStrength?: number;
+  security?: string;
+  frequency?: number;
+  connectionType?: string;
+  maxBandwidth?: string;
+}
+
+interface WiFiNetwork {
+  ssid: string;
+  signalStrength: number;
+  security: string;
+  frequency: number;
+  channel: number;
+  quality: number;
+}
+
+interface EthernetNetwork {
+  interface: string;
+  connectionType: string;
+  maxBandwidth: string;
+  currentSpeed: number;
+  ip4: string;
+  mac: string;
+  duplex: string;
+  operstate: string;
+}
+
+interface NetworkOverview {
+  currentConnections: {
+    wifi: NetworkInterface[];
+    ethernet: NetworkInterface[];
+  };
+  availableNetworks: {
+    wifi: WiFiNetwork[];
+  };
+  bandwidth: BandwidthData;
+  timestamp: number;
 }
 
 interface BandwidthData {
@@ -171,6 +209,10 @@ export const useRealNetwork = () => {
   const [networkStatus, setNetworkStatus] = useState<NetworkStatus | null>(null);
   const [systemInfo, setSystemInfo] = useState<SystemInfo | null>(null);
   const [userBandwidth, setUserBandwidth] = useState<UserBandwidthData | null>(null);
+  const [currentWiFi, setCurrentWiFi] = useState<NetworkInterface[]>([]);
+  const [availableWiFi, setAvailableWiFi] = useState<WiFiNetwork[]>([]);
+  const [ethernetNetworks, setEthernetNetworks] = useState<EthernetNetwork[]>([]);
+  const [networkOverview, setNetworkOverview] = useState<NetworkOverview | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [isConnected, setIsConnected] = useState(false);
@@ -299,6 +341,82 @@ export const useRealNetwork = () => {
     }
   }, []);
 
+  // Fetch current WiFi connection info
+  const fetchCurrentWiFi = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/network/wifi/current`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      
+      if (data.success) {
+        setCurrentWiFi(data.data);
+      } else {
+        throw new Error(data.error || 'Failed to fetch current WiFi info');
+      }
+    } catch (err) {
+      console.error('Error fetching current WiFi:', err);
+    }
+  }, []);
+
+  // Fetch available WiFi networks
+  const fetchAvailableWiFi = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/network/wifi/available`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      
+      if (data.success) {
+        setAvailableWiFi(data.data);
+      } else {
+        throw new Error(data.error || 'Failed to fetch available WiFi networks');
+      }
+    } catch (err) {
+      console.error('Error fetching available WiFi networks:', err);
+    }
+  }, []);
+
+  // Fetch Ethernet networks
+  const fetchEthernetNetworks = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/network/ethernet`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      
+      if (data.success) {
+        setEthernetNetworks(data.data);
+      } else {
+        throw new Error(data.error || 'Failed to fetch Ethernet networks');
+      }
+    } catch (err) {
+      console.error('Error fetching Ethernet networks:', err);
+    }
+  }, []);
+
+  // Fetch comprehensive network overview
+  const fetchNetworkOverview = useCallback(async () => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/network/overview`);
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+      const data = await response.json();
+      
+      if (data.success) {
+        setNetworkOverview(data.data);
+      } else {
+        throw new Error(data.error || 'Failed to fetch network overview');
+      }
+    } catch (err) {
+      console.error('Error fetching network overview:', err);
+    }
+  }, []);
+
   // Initialize and start monitoring
   useEffect(() => {
     let intervalId: NodeJS.Timeout;
@@ -313,12 +431,22 @@ export const useRealNetwork = () => {
         // Fetch initial data
         await Promise.all([
           fetchNetworkStatus(),
-          fetchSystemInfo()
+          fetchSystemInfo(),
+          fetchCurrentWiFi(),
+          fetchAvailableWiFi(),
+          fetchEthernetNetworks(),
+          fetchNetworkOverview()
         ]);
 
         // Start real-time monitoring
         intervalId = setInterval(async () => {
-          await fetchNetworkStatus();
+          await Promise.all([
+            fetchNetworkStatus(),
+            fetchCurrentWiFi(),
+            fetchAvailableWiFi(),
+            fetchEthernetNetworks(),
+            fetchNetworkOverview()
+          ]);
         }, 5000); // Update every 5 seconds
       } else {
         setError('Network monitor server is not running. Please start the server with: npm run server');
@@ -398,6 +526,10 @@ export const useRealNetwork = () => {
     networkStatus,
     systemInfo,
     userBandwidth,
+    currentWiFi,
+    availableWiFi,
+    ethernetNetworks,
+    networkOverview,
     isLoading,
     error,
     isConnected,
@@ -412,6 +544,10 @@ export const useRealNetwork = () => {
     fetchNetworkStatus,
     fetchSystemInfo,
     fetchBandwidth,
+    fetchCurrentWiFi,
+    fetchAvailableWiFi,
+    fetchEthernetNetworks,
+    fetchNetworkOverview,
     validateEmail,
     getUserBandwidth,
     checkServerHealth,

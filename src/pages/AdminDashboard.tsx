@@ -13,8 +13,7 @@ import {
   Shield,
   Home,
   Smartphone,
-  Laptop,
-  RefreshCw
+  Laptop
 } from "lucide-react";
 import { useNavigate } from "react-router-dom";
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer, BarChart, Bar } from 'recharts';
@@ -607,8 +606,7 @@ const AdminDashboard = () => {
                 disabled={networkLoading}
                 className="border-slate-600 text-slate-300 hover:bg-slate-700"
               >
-                <RefreshCw className={`h-4 w-4 mr-2 ${networkLoading ? 'animate-spin' : ''}`} />
-                Refresh All Users
+                Manage All Users
               </Button>
             </CardTitle>
           </CardHeader>
@@ -686,7 +684,7 @@ const AdminDashboard = () => {
                             disabled={networkLoading}
                             className="border-slate-600 text-slate-300 hover:bg-slate-700"
                           >
-                            Refresh
+                            Manage
                           </Button>
                         </div>
                       </div>
