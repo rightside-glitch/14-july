@@ -501,7 +501,7 @@ export const useRealNetwork = () => {
     return networkStatus.interfaces.filter(iface => 
       iface.operstate === 'up' && 
       iface.ip4 && 
-      iface.type !== 'loopback'
+      (typeof iface.type === 'string' && iface.type === 'wireless') || (typeof iface.iface === 'string' && iface.iface.toLowerCase().includes('wifi'))
     );
   }, [networkStatus]);
 
