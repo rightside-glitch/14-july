@@ -47,7 +47,7 @@ const NetworkOverview: React.FC<NetworkOverviewProps> = ({
   };
 
   const getSecurityIcon = (security: string) => {
-    if (security.toLowerCase().includes('wpa') || security.toLowerCase().includes('wep')) {
+    if (typeof security === 'string' && (security.toLowerCase().includes('wpa') || security.toLowerCase().includes('wep'))) {
       return <Shield className="h-4 w-4 text-green-400" />;
     }
     return <Shield className="h-4 w-4 text-red-400" />;
