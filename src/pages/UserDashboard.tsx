@@ -209,7 +209,7 @@ const UserDashboard = () => {
 
         {/* Real-Time System Overview */}
         {hasRealData && systemInfo && (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6 mb-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-8">
             {/* Current Bandwidth */}
             <Card className="bg-slate-800/50 border-slate-700">
               <CardContent className="p-6">
@@ -225,42 +225,20 @@ const UserDashboard = () => {
                 </div>
               </CardContent>
             </Card>
-
-            {/* CPU Usage */}
+            {/* Network Info */}
             <Card className="bg-slate-800/50 border-slate-700">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
                   <div>
-                    <p className="text-slate-400 text-sm">CPU</p>
-                    <p className="text-lg font-bold text-white">{systemInfo.cpu.brand}</p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {systemInfo.cpu.cores} cores @ {systemInfo.cpu.speed} GHz
-                    </p>
+                    <p className="text-slate-400 text-sm">Network Info</p>
+                    <p className="text-lg font-bold text-white">{activeInterfaces.length} Active Interface{activeInterfaces.length !== 1 ? 's' : ''}</p>
+                    <p className="text-xs text-slate-500 mt-1">Total Usage: {userBandwidth ? userBandwidth.bandwidth.total.usageGB.toFixed(2) : '0.00'} GB</p>
                   </div>
-                  <Cpu className="h-8 w-8 text-green-400" />
+                  <Wifi className="h-8 w-8 text-green-400" />
                 </div>
               </CardContent>
             </Card>
-
-            {/* Memory Usage */}
-            <Card className="bg-slate-800/50 border-slate-700">
-              <CardContent className="p-6">
-                <div className="flex items-center justify-between">
-                  <div>
-                    <p className="text-slate-400 text-sm">Memory</p>
-                    <p className="text-2xl font-bold text-white">
-                      {((systemInfo.memory.used / systemInfo.memory.total) * 100).toFixed(1)}%
-                    </p>
-                    <p className="text-xs text-slate-500 mt-1">
-                      {Math.round(systemInfo.memory.used / 1024 / 1024 / 1024)}GB / {Math.round(systemInfo.memory.total / 1024 / 1024 / 1024)}GB
-                    </p>
-                  </div>
-                  <MemoryStick className="h-8 w-8 text-blue-400" />
-                </div>
-              </CardContent>
-            </Card>
-
-            {/* Machine Type */}
+            {/* Machine Type (keep this card) */}
             <Card className="bg-slate-800/50 border-slate-700">
               <CardContent className="p-6">
                 <div className="flex items-center justify-between">
