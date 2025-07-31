@@ -81,17 +81,17 @@ const Index = () => {
                   <Wifi className="h-8 w-8 text-blue-400" />
                 </div>
               </div>
-              <CardTitle className="text-2xl text-white">Available Network Interfaces</CardTitle>
-              <p className="text-slate-300 text-sm">All currently detected network interfaces (stable until page reload)</p>
+              <CardTitle className="text-2xl text-white">Active Network Interfaces (Real-Time)</CardTitle>
+              <p className="text-slate-300 text-sm">Currently active network interfaces (updates every 5s)</p>
             </CardHeader>
             <CardContent>
-              {loadingNetworks ? (
+              {loading ? (
                 <div className="p-4 text-center text-slate-400">Loading network interfaces...</div>
-              ) : availableNetworks.length === 0 ? (
-                <div className="p-4 text-center text-slate-400">No network interfaces found</div>
+              ) : activeInterfaces.length === 0 ? (
+                <div className="p-4 text-center text-slate-400">No active network interfaces found</div>
               ) : (
                 <div className="space-y-3">
-                  {availableNetworks.map((iface, idx) => (
+                  {activeInterfaces.map((iface, idx) => (
                     <div key={iface.iface + idx} className="p-3 bg-slate-700/40 rounded-lg flex flex-col md:flex-row md:items-center md:justify-between gap-2 border border-slate-600">
                       <div className="flex items-center gap-3">
                         <Wifi className="h-5 w-5 text-blue-400" />
