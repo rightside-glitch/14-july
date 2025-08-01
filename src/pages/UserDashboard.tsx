@@ -346,38 +346,6 @@ const UserDashboard = () => {
           </Card>
         )}
 
-        {/* Real-Time Bandwidth Usage Graph */}
-        {hasRealData && Array.isArray(bandwidthHistory) && bandwidthHistory.length > 0 && (
-          <Card className="mb-8 bg-slate-800/50 border-slate-700">
-            <CardHeader>
-              <CardTitle className="text-white flex items-center gap-2">
-                <TrendingUp className="h-5 w-5 text-cyan-400" />
-                Bandwidth Usage (Real-Time)
-              </CardTitle>
-            </CardHeader>
-            <CardContent>
-              <ResponsiveContainer width="100%" height={300}>
-                <LineChart data={bandwidthHistory}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#374151" />
-                  <XAxis
-                    dataKey="timestamp"
-                    stroke="#9CA3AF"
-                    tickFormatter={ts => new Date(ts).toLocaleTimeString()}
-                  />
-                  <YAxis stroke="#9CA3AF" unit=" Mbps" />
-                  <Tooltip
-                    labelFormatter={ts => new Date(ts).toLocaleString()}
-                    formatter={(value, name) => [`${value} Mbps`, name.charAt(0).toUpperCase() + name.slice(1)]}
-                  />
-                  <Line type="monotone" dataKey="download" stroke="#3B82F6" strokeWidth={2} dot={false} name="Download" />
-                  <Line type="monotone" dataKey="upload" stroke="#10B981" strokeWidth={2} dot={false} name="Upload" />
-                  <Line type="monotone" dataKey="total" stroke="#06B6D4" strokeWidth={2} dot={false} name="Total" />
-                </LineChart>
-              </ResponsiveContainer>
-            </CardContent>
-          </Card>
-        )}
-
         {/* Machine Information and Email Validation */}
         {hasRealData && systemInfo && (
           <div className="mb-8">

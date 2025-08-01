@@ -300,15 +300,6 @@ const AdminDashboard = () => {
     }
   };
 
-  // Generate sample devices if no real devices exist
-  const sampleDevices = [
-    { id: 'sample1', name: 'Admin Desktop', usage: 2.5, type: 'desktop', status: 'active' },
-    { id: 'sample2', name: 'Marketing Laptop', usage: 1.8, type: 'laptop', status: 'active' },
-    { id: 'sample3', name: 'Sales Mobile', usage: 0.5, type: 'mobile', status: 'active' },
-    { id: 'sample4', name: 'Conference TV', usage: 0.8, type: 'tv', status: 'active' },
-    { id: 'sample5', name: 'Gaming PC', usage: 3.2, type: 'gaming', status: 'active' }
-  ];
-
   // Filter devices to only show those assigned to users with 'user' role
   const userEmails = userStats.map((stat: any) => stat.userEmail).filter(Boolean);
   const displayDevices = devices.filter(device => userEmails.includes(device.user));
@@ -431,14 +422,27 @@ const AdminDashboard = () => {
   // Dismiss user from Firestore
   const handleDismissUser = async () => {
     if (!userToManage) return;
-    try {
-      await deleteDoc(doc(db, "users", userToManage.id));
-      setManageUserDialogOpen(false);
-      setUserToManage(null);
-    } catch (error) {
-      handleFirestoreError(error, 'dismiss user');
-    }
+    await updateDoc(doc(db, "users", userToManage.id), { status: "inactive" });
+    setManageUserDialogOpen(false);
   };
+  const handleActivateUser = async () => {
+    if (!userToManage) return;
+    await updateDoc(doc(db, "users", userToManage.id), { status: "active" });
+    setManageUserDialogOpen(false);
+  };
+
+  // Add this handler inside AdminDashboard component:
+  const handleSetUserStatus = async (user, status) => {
+    await updateDoc(doc(db, "users", user.id), { status });
+  };
+
+  // Real-time user list
+  useEffect(() => {
+    const unsub = onSnapshot(collection(db, "users"), (snapshot) => {
+      setRealUsers(snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() })));
+    });
+    return () => unsub();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
@@ -700,6 +704,23 @@ const AdminDashboard = () => {
                           >
                             Manage
                           </Button>
+                          {user.status === 'active' ? (
+                            <Button
+                              size="sm"
+                              variant="destructive"
+                              onClick={() => handleSetUserStatus(user, 'inactive')}
+                            >
+                              Deactivate
+                            </Button>
+                          ) : (
+                            <Button
+                              size="sm"
+                              variant="default"
+                              onClick={() => handleSetUserStatus(user, 'active')}
+                            >
+                              Activate
+                            </Button>
+                          )}
                         </div>
                       </div>
                       
@@ -733,16 +754,22 @@ const AdminDashboard = () => {
                       <DialogTitle>Manage User</DialogTitle>
                     </DialogHeader>
                     <div className="py-4">
-                      <p>Are you sure you want to dismiss this user?</p>
+                      <p>Are you sure you want to {userToManage?.status === 'active' ? 'dismiss' : 'activate'} this user?</p>
                       <p className="mt-2 font-bold text-red-500">{userToManage?.email}</p>
                     </div>
                     <DialogFooter>
                       <Button variant="outline" onClick={() => setManageUserDialogOpen(false)}>
                         Cancel
                       </Button>
-                      <Button variant="destructive" onClick={handleDismissUser}>
-                        Dismiss User
-                      </Button>
+                      {userToManage?.status === 'active' ? (
+                        <Button variant="destructive" onClick={handleDismissUser}>
+                          Dismiss User
+                        </Button>
+                      ) : (
+                        <Button variant="default" onClick={handleActivateUser}>
+                          Activate User
+                        </Button>
+                      )}
                     </DialogFooter>
                   </DialogContent>
                 </Dialog>
