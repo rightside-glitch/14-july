@@ -25,45 +25,12 @@ const Index = () => {
   // const [availableNetworks, setAvailableNetworks] = useState<any[]>([]);
   // const [loadingNetworks, setLoadingNetworks] = useState(true);
 
-  // Add state for join password and feedback
-  const [joinNetworkIdx, setJoinNetworkIdx] = useState<number | null>(null);
-  const [joinPassword, setJoinPassword] = useState("");
-  const [joinError, setJoinError] = useState("");
-  const [joinSuccess, setJoinSuccess] = useState("");
-
-  // Remove useEffect that fetches available networks
-  // useEffect(() => {
-  //   const fetchNetworks = async () => {
-  //     setLoadingNetworks(true);
-  //     try {
-  //       const res = await fetch('http://localhost:3001/api/network/interfaces');
-  //       const data = await res.json();
-  //       if (data.success) {
-  //         setAvailableNetworks(data.data);
-  //       } else {
-  //         setAvailableNetworks([]);
-  //       }
-  //     } catch (err) {
-  //       setAvailableNetworks([]);
-  //     }
-  //     setLoadingNetworks(false);
-  //   };
-  //   fetchNetworks();
-  //   // Removed interval for auto-refresh
-  // }, []);
-
-  // Mock password check (replace with real API/db check as needed)
-  const handleJoinNetwork = (iface: any, idx: number) => {
-    setJoinError("");
-    setJoinSuccess("");
-    if (joinPassword === "password123") { // Replace with real check
-      setJoinSuccess(`Joined network ${iface.iface} successfully!`);
-      setJoinNetworkIdx(null);
-      setJoinPassword("");
-    } else {
-      setJoinError("Incorrect password. Please try again.");
-    }
-  };
+  // Remove join-related state
+  // const [joinNetworkIdx, setJoinNetworkIdx] = useState<number | null>(null);
+  // const [joinPassword, setJoinPassword] = useState("");
+  // const [joinError, setJoinError] = useState("");
+  // const [joinSuccess, setJoinSuccess] = useState("");
+  // Remove handleJoinNetwork function
 
   // Use networkLoading from useRealNetwork for loading state
   const loading = networkLoading;
@@ -127,37 +94,9 @@ const Index = () => {
                         {iface.maxBandwidth && <span>Max: {iface.maxBandwidth}</span>}
                         <span>MAC: {iface.mac}</span>
                         <span>Speed: {iface.speed} Mbps</span>
-                        {joinNetworkIdx === idx ? (
-                          <>
-                            <input
-                              type="password"
-                              className="ml-2 px-2 py-1 rounded bg-slate-800 border border-slate-600 text-white"
-                              placeholder="Enter password"
-                              value={joinPassword}
-                              onChange={e => setJoinPassword(e.target.value)}
-                              style={{ minWidth: 120 }}
-                            />
-                            <Button size="sm" className="ml-2" onClick={() => handleJoinNetwork(iface, idx)}>
-                              Join
-                            </Button>
-                            <Button size="sm" variant="outline" className="ml-1" onClick={() => { setJoinNetworkIdx(null); setJoinPassword(""); setJoinError(""); }}>
-                              Cancel
-                            </Button>
-                          </>
-                        ) : (
-                          <Button size="sm" onClick={() => { setJoinNetworkIdx(idx); setJoinPassword(""); setJoinError(""); setJoinSuccess(""); }}>
-                            Join
-                          </Button>
-                        )}
                       </div>
-                      {joinNetworkIdx === idx && joinError && (
-                        <div className="text-xs text-red-400 mt-1">{joinError}</div>
-                      )}
                     </div>
                   ))}
-                  {joinSuccess && (
-                    <div className="text-green-400 text-center mt-2">{joinSuccess}</div>
-                  )}
                 </div>
               )}
             </CardContent>
