@@ -98,6 +98,25 @@ const UserDashboard = () => {
     return `${manufacturer} ${model}`;
   };
 
+  // Add state for join password and feedback
+  const [joinNetworkIdx, setJoinNetworkIdx] = useState<number | null>(null);
+  const [joinPassword, setJoinPassword] = useState("");
+  const [joinError, setJoinError] = useState("");
+  const [joinSuccess, setJoinSuccess] = useState("");
+
+  // Mock password check (replace with real API/db check as needed)
+  const handleJoinNetwork = (iface: any, idx: number) => {
+    setJoinError("");
+    setJoinSuccess("");
+    if (joinPassword === "password123") { // Replace with real check
+      setJoinSuccess(`Joined network ${iface.iface} successfully!`);
+      setJoinNetworkIdx(null);
+      setJoinPassword("");
+    } else {
+      setJoinError("Incorrect password. Please try again.");
+    }
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900">
       {/* Header */}
@@ -216,9 +235,15 @@ const UserDashboard = () => {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-slate-400 text-sm">Current Bandwidth</p>
-                    <p className="text-2xl font-bold text-white">
-                      {currentBandwidth ? (currentBandwidth.total * 0.45).toFixed(2) : '0.00'} GB/h
-                    </p>
+                    <div className="flex items-center gap-2">
+                      <span className="relative flex h-3 w-3">
+                        <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-green-400 opacity-75"></span>
+                        <span className="relative inline-flex rounded-full h-3 w-3 bg-green-500"></span>
+                      </span>
+                      <span className="text-2xl font-bold text-white">
+                        {currentBandwidth ? (currentBandwidth.total * 0.45).toFixed(2) : '0.00'} GB/h
+                      </span>
+                    </div>
                     <p className="text-xs text-slate-500 mt-1">Real-time network usage</p>
                   </div>
                   <Activity className="h-8 w-8 text-cyan-400" />
@@ -265,8 +290,8 @@ const UserDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-                {activeInterfaces.map((iface, index) => (
-                  <div key={index} className="p-4 bg-slate-700/50 rounded-lg border border-slate-600">
+                {activeInterfaces.map((iface, idx) => (
+                  <div key={idx} className="p-4 bg-slate-700/50 rounded-lg border border-slate-600">
                     <div className="flex items-center justify-between mb-3">
                       <span className="text-sm font-medium text-white">{iface.iface}</span>
                       <Badge variant="outline" className="border-green-500 text-green-400 text-xs">
@@ -289,9 +314,39 @@ const UserDashboard = () => {
                         </div>
                       )}
                     </div>
+                    <div className="flex gap-2 mt-3 items-center">
+                      {joinNetworkIdx === idx ? (
+                        <>
+                          <input
+                            type="password"
+                            className="px-2 py-1 rounded bg-slate-800 border border-slate-600 text-white"
+                            placeholder="Enter password"
+                            value={joinPassword}
+                            onChange={e => setJoinPassword(e.target.value)}
+                            style={{ minWidth: 120 }}
+                          />
+                          <Button size="sm" className="ml-2" onClick={() => handleJoinNetwork(iface, idx)}>
+                            Join
+                          </Button>
+                          <Button size="sm" variant="outline" className="ml-1" onClick={() => { setJoinNetworkIdx(null); setJoinPassword(""); setJoinError(""); }}>
+                            Cancel
+                          </Button>
+                        </>
+                      ) : (
+                        <Button size="sm" onClick={() => { setJoinNetworkIdx(idx); setJoinPassword(""); setJoinError(""); setJoinSuccess(""); }}>
+                          Join
+                        </Button>
+                      )}
+                    </div>
+                    {joinNetworkIdx === idx && joinError && (
+                      <div className="text-xs text-red-400 mt-1">{joinError}</div>
+                    )}
                   </div>
                 ))}
               </div>
+              {joinSuccess && (
+                <div className="text-green-400 text-center mt-2">{joinSuccess}</div>
+              )}
             </CardContent>
           </Card>
         )}
